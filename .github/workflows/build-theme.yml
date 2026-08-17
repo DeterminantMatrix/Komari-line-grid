@@ -18,6 +18,15 @@ jobs:
         with:
           node-version: 22
 
+      - name: Apply staged hotfix patch
+        shell: bash
+        run: |
+          if compgen -G 'scripts/hotfix.b64.part-*' >/dev/null; then
+            cat scripts/hotfix.b64.part-* | base64 -d > /tmp/line-grid-hotfix.patch
+            git apply --check /tmp/line-grid-hotfix.patch
+            git apply /tmp/line-grid-hotfix.patch
+          fi
+
       - name: Restore staged source bundle
         shell: bash
         run: |
@@ -47,14 +56,23 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         shell: bash
         run: |
-          if ! compgen -G 'scripts/source-bundle.part-*' >/dev/null; then
+          staged=0
+          if compgen -G 'scripts/source-bundle.part-*' >/dev/null; then
+            rm scripts/source-bundle.part-* scripts/source-bundle.sha256
+            staged=1
+          fi
+          if compgen -G 'scripts/hotfix.b64.part-*' >/dev/null; then
+            rm scripts/hotfix.b64.part-*
+            staged=1
+          fi
+          if [[ "$staged" -eq 0 ]]; then
             exit 0
           fi
-          rm scripts/source-bundle.part-* scripts/source-bundle.sha256
           git add -A
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Materialize Komari Line Grid v0.2.0 source'
+          version="$(node -p "require('./komari-theme.json').version")"
+          git commit -m "Materialize Komari Line Grid v${version} source"
           git push
 
       - name: Publish GitHub Release
