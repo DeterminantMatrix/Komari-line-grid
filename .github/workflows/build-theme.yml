@@ -50,3 +50,19 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Materialize verified app.js source'
           git push
+      - name: Publish GitHub Release
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(node -p "require('./komari-theme.json').version")"
+          tag="v${version}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" komari-line-grid.zip --clobber
+          else
+            gh release create "$tag" komari-line-grid.zip \
+              --target "$GITHUB_SHA" \
+              --title "$tag" \
+              --notes "Komari Line Grid ${tag}. Install directly from the repository URL in Komari, or download the attached komari-line-grid.zip theme package."
+          fi
