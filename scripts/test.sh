@@ -28,4 +28,17 @@ if(!html.includes('Line Grid 主脚本未启动')) throw new Error('static start
 console.log('json/ui invariants ok');
 NODE
 
+./scripts/package.sh >/dev/null
+node - <<'NODE'
+const cp=require('child_process');
+const html=cp.execFileSync('unzip',['-p','komari-line-grid.zip','dist/index.html'],{encoding:'utf8'});
+for(const ref of ['src="./js/charts.js"','src="./js/komari-api.js"','src="./js/app.js"','href="./css/app.css"']) {
+  if(html.includes(ref)) throw new Error('release index still depends on external asset '+ref);
+}
+if(!html.includes('data-inline-source="dist/js/app.js"')) throw new Error('release app.js not inlined');
+if(!html.includes('__KOMARI_LINE_GRID_APP_STARTED__')) throw new Error('release startup marker missing');
+if(!html.includes('line-grid-inline-style')) throw new Error('release CSS not inlined');
+console.log('release index is self-contained');
+NODE
+
 echo 'all checks passed'
