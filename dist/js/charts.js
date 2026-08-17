@@ -1,11 +1,166 @@
-(function(g){
-  function num(v){v=Number(v);return Number.isFinite(v)?v:0}
-  function css(k,f){var v=getComputedStyle(document.documentElement).getPropertyValue(k).trim();return v||f}
-  function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
-  function rgba(hex,a){hex=(hex||'#d5d0c4').replace('#','');if(hex.length===3)hex=hex.split('').map(function(x){return x+x}).join('');var n=parseInt(hex,16);return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')'}
-  function spark(values,opt){opt=opt||{};var w=opt.w||480,h=opt.h||80,pts=(values||[]).map(function(v){return v&&typeof v==='object'?num(v.value!=null?v.value:v.v):num(v)});if(!pts.length)return '<div class="muted">暂无历史数据</div>';var usable=pts.filter(function(v){return v>=0}),max=Math.max.apply(null,usable.concat([50]));max=max<=50?50:max<=100?100:max<=200?200:max<=500?500:Math.ceil(max/100)*100;var px=3,py=6,step=pts.length===1?0:(w-px*2)/(pts.length-1);var c=pts.map(function(v,i){return [px+i*step,h-py-((Math.max(0,v))/Math.max(1,max))*(h-py*2)]});var d=c.map(function(p,i){return(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)}).join(' '),col=opt.color||css('--ink','#d5d0c4'),hit=Math.max(6,step||w);var rects=c.map(function(p,i){var tip=opt.tips&&opt.tips[i]||((pts[i]<0?'丢包':pts[i]+' ms'));return '<rect data-tip="'+esc(tip)+'" x="'+(p[0]-hit/2).toFixed(1)+'" y="0" width="'+hit.toFixed(1)+'" height="'+h+'" fill="transparent"/>'}).join('');return '<svg class="spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="1.25" vector-effect="non-scaling-stroke"/>'+rects+'</svg>'}
-  function bars(items,opt){opt=opt||{};var w=opt.w||480,h=opt.h||120,list=items||[],vals=list.map(function(x){return num(typeof x==='number'?x:x.total)});if(!vals.length)return '<div class="muted">暂无流量数据</div>';var max=Math.max.apply(null,vals.concat([1])),gap=6,bw=(w-gap*(vals.length+1))/vals.length,col=rgba(css('--ink','#d5d0c4'),.38),gold=css('--gold','#c4a56a');return '<svg class="bars" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+vals.map(function(v,i){var bh=Math.max(2,v/max*(h-8)),x=gap+i*(bw+gap),y=h-bh,tip=opt.tips&&opt.tips[i]||String(v);return '<rect data-tip="'+esc(tip)+'" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+Math.max(2,bw).toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+(i===vals.length-1?gold:col)+'"/>'}).join('')+'</svg>'}
-  function stacked(items,opt){opt=opt||{};var w=opt.w||520,h=opt.h||150,list=items||[],tot=list.map(function(x){return num(x.up)+num(x.down)});if(!list.length)return '<div class="muted">暂无流量数据</div>';var max=Math.max.apply(null,tot.concat([1])),gap=7,bw=(w-gap*(list.length+1))/list.length,ink=rgba(css('--ink','#d5d0c4'),.38),gold=css('--gold','#c4a56a');return '<svg class="bars" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+list.map(function(it,i){var dh=num(it.down)/max*(h-8),uh=num(it.up)/max*(h-8),x=gap+i*(bw+gap),tip=opt.tips&&opt.tips[i]||'';return '<rect data-tip="'+esc(tip)+'" x="'+x.toFixed(1)+'" y="'+(h-dh).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(1,dh).toFixed(1)+'" fill="'+ink+'"/><rect data-tip="'+esc(tip)+'" x="'+x.toFixed(1)+'" y="'+(h-dh-uh).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(1,uh).toFixed(1)+'" fill="'+gold+'"/>'}).join('')+'</svg>'}
-  function wave(opt){opt=opt||{};var w=opt.w||600,h=opt.h||55,mid=h/2,d='M0 '+mid;for(var x=0;x<=w;x+=3){var t=x/w,e=t>.55&&t<.9?Math.sin((t-.55)/.35*Math.PI):0,y=mid-Math.sin(t*Math.PI*4.4)*16*e;d+=' L'+x+' '+y.toFixed(1)}return '<svg class="wave" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><path d="'+d+'" fill="none" stroke="'+rgba(css('--ink','#d5d0c4'),.35)+'" stroke-width="1.1"/></svg>'}
-  g.LineGridCharts={spark:spark,bars:bars,stacked:stacked,wave:wave};
+(function (global) {
+  'use strict';
+
+  function finite(value) {
+    var n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function css(name, fallback) {
+    var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }
+
+  function escapeAttr(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;');
+  }
+
+  function rgba(hex, alpha) {
+    var raw = String(hex || '#d5d0c4').replace('#', '');
+    if (raw.length === 3) raw = raw.split('').map(function (c) { return c + c; }).join('');
+    var n = parseInt(raw, 16);
+    if (!Number.isFinite(n)) return 'rgba(213,208,196,' + alpha + ')';
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha + ')';
+  }
+
+  function spark(values, options) {
+    options = options || {};
+    var width = options.w || 480;
+    var height = options.h || 80;
+    var points = (values || []).map(function (value) {
+      if (value && typeof value === 'object') {
+        var candidate = value.value != null ? value.value : value.v;
+        return finite(candidate);
+      }
+      return finite(value);
+    });
+    if (!points.length) return '<div class="chart-empty">暂无历史数据</div>';
+
+    var good = points.filter(function (value) { return value != null && value >= 0; });
+    if (!good.length) return '<div class="chart-empty">暂无历史数据</div>';
+    var dataMax = Math.max.apply(null, good);
+    var max = dataMax <= 50 ? 50 : dataMax <= 100 ? 100 : dataMax <= 200 ? 200 : dataMax <= 500 ? 500 : Math.ceil(dataMax / 100) * 100;
+    var padX = 3;
+    var padY = 6;
+    var step = points.length === 1 ? 0 : (width - padX * 2) / (points.length - 1);
+    var coords = points.map(function (value, index) {
+      var x = padX + index * step;
+      var normalized = value == null || value < 0 ? 0 : value;
+      var y = height - padY - normalized / Math.max(1, max) * (height - padY * 2);
+      return [x, y];
+    });
+    var d = coords.map(function (point, index) {
+      return (index ? 'L' : 'M') + point[0].toFixed(2) + ' ' + point[1].toFixed(2);
+    }).join(' ');
+    var color = options.color || css('--ink', '#d5d0c4');
+    var hitWidth = Math.max(6, step || width);
+    var hits = coords.map(function (point, index) {
+      var value = points[index];
+      var tip = options.tips && options.tips[index] || (value == null || value < 0 ? '无数据' : value + ' ms');
+      return '<rect class="chart-hit" data-tip="' + escapeAttr(tip) + '" x="' + (point[0] - hitWidth / 2).toFixed(2) + '" y="0" width="' + hitWidth.toFixed(2) + '" height="' + height + '" fill="transparent"/>';
+    }).join('');
+    return '<svg class="spark" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none"><path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.25" vector-effect="non-scaling-stroke"/>' + hits + '</svg>';
+  }
+
+  function bars(items, options) {
+    options = options || {};
+    var width = options.w || 480;
+    var height = options.h || 120;
+    var list = items || [];
+    if (!list.length) return '<div class="chart-empty">暂无流量数据</div>';
+    var values = list.map(function (item) {
+      var value = typeof item === 'number' ? item : item && item.total;
+      return finite(value) || 0;
+    });
+    var max = Math.max.apply(null, values.concat([1]));
+    var gap = 6;
+    var barWidth = (width - gap * (values.length + 1)) / Math.max(1, values.length);
+    var neutral = rgba(css('--ink', '#d5d0c4'), 0.4);
+    var gold = css('--gold', '#c4a56a');
+    var rects = values.map(function (value, index) {
+      var barHeight = Math.max(2, value / max * (height - 8));
+      var x = gap + index * (barWidth + gap);
+      var y = height - barHeight;
+      var tip = options.tips && options.tips[index] || String(value);
+      return '<rect class="chart-hit" data-tip="' + escapeAttr(tip) + '" x="' + x.toFixed(2) + '" y="' + y.toFixed(2) + '" width="' + Math.max(2, barWidth).toFixed(2) + '" height="' + barHeight.toFixed(2) + '" fill="' + (index === values.length - 1 ? gold : neutral) + '"/>';
+    }).join('');
+    return '<svg class="bars" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none">' + rects + '</svg>';
+  }
+
+  function stacked(items, options) {
+    options = options || {};
+    var width = options.w || 520;
+    var height = options.h || 150;
+    var list = items || [];
+    if (!list.length) return '<div class="chart-empty">暂无流量数据</div>';
+    var totals = list.map(function (item) {
+      return (finite(item && (item.downlink != null ? item.downlink : item.down)) || 0) + (finite(item && (item.uplink != null ? item.uplink : item.up)) || 0);
+    });
+    var max = Math.max.apply(null, totals.concat([1]));
+    var gap = 7;
+    var barWidth = (width - gap * (list.length + 1)) / Math.max(1, list.length);
+    var neutral = rgba(css('--ink', '#d5d0c4'), 0.4);
+    var gold = css('--gold', '#c4a56a');
+    return '<svg class="bars" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none">' + list.map(function (item, index) {
+      var down = finite(item && (item.downlink != null ? item.downlink : item.down)) || 0;
+      var up = finite(item && (item.uplink != null ? item.uplink : item.up)) || 0;
+      var downHeight = Math.max(1, down / max * (height - 8));
+      var upHeight = Math.max(1, up / max * (height - 8));
+      var x = gap + index * (barWidth + gap);
+      var tip = options.tips && options.tips[index] || '';
+      return '<rect class="chart-hit" data-tip="' + escapeAttr(tip) + '" x="' + x.toFixed(2) + '" y="' + (height - downHeight).toFixed(2) + '" width="' + Math.max(2, barWidth).toFixed(2) + '" height="' + downHeight.toFixed(2) + '" fill="' + neutral + '"/><rect class="chart-hit" data-tip="' + escapeAttr(tip) + '" x="' + x.toFixed(2) + '" y="' + (height - downHeight - upHeight).toFixed(2) + '" width="' + Math.max(2, barWidth).toFixed(2) + '" height="' + upHeight.toFixed(2) + '" fill="' + gold + '"/>';
+    }).join('') + '</svg>';
+  }
+
+  function wave(options) {
+    options = options || {};
+    var width = options.w || 600;
+    var height = options.h || 55;
+    var mid = height / 2;
+    var d = 'M 0 ' + mid;
+    for (var x = 0; x <= width; x += 3) {
+      var t = x / width;
+      var envelope = t > 0.55 && t < 0.9 ? Math.sin((t - 0.55) / 0.35 * Math.PI) : 0;
+      var y = mid - Math.sin(t * Math.PI * 4.4) * 16 * envelope;
+      d += ' L ' + x + ' ' + y.toFixed(1);
+    }
+    return '<svg class="wave" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true"><path d="' + d + '" fill="none" stroke="' + rgba(css('--ink', '#d5d0c4'), 0.35) + '" stroke-width="1.1"/></svg>';
+  }
+
+  function ruler(today, daysInMonth, options) {
+    options = options || {};
+    var heights = options.heights || [];
+    var selected = options.selected || today;
+    var half = options.halfDay || 0;
+    var width = 1000;
+    var height = 48;
+    var maxHeight = Math.max.apply(null, heights.concat([1]));
+    var ticks = '';
+    var labels = '';
+    for (var day = 1; day <= daysInMonth; day += 1) {
+      var x = ((day - 1) / Math.max(1, daysInMonth - 1)) * (width - 8) + 4;
+      var future = day > today;
+      var amplitude = heights[day - 1] != null ? 8 + (heights[day - 1] / maxHeight) * 18 : 8;
+      var y2 = 26;
+      var y1 = y2 - (future ? 6 : amplitude);
+      var color = day === selected ? css('--gold', '#c4a56a') : rgba(css('--ink', '#d5d0c4'), future ? 0.12 : 0.28);
+      ticks += '<line x1="' + x.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x.toFixed(1) + '" y2="' + y2 + '" stroke="' + color + '" stroke-width="' + (day === selected ? 1.6 : 1) + '"/>';
+      if (day === 1 || day === 5 || day === 10 || day === 15 || day === 20 || day === 25 || day === daysInMonth) {
+        labels += '<text x="' + x.toFixed(1) + '" y="44" text-anchor="middle" fill="' + rgba(css('--ink', '#d5d0c4'), 0.28) + '" font-size="11" font-family="IBM Plex Mono, monospace">' + String(day).padStart(2, '0') + '</text>';
+      }
+    }
+    var selectedX = ((selected - 1) / Math.max(1, daysInMonth - 1)) * (width - 8) + 4;
+    var marker = '<line x1="' + selectedX.toFixed(1) + '" y1="2" x2="' + selectedX.toFixed(1) + '" y2="26" stroke="' + css('--gold', '#c4a56a') + '" stroke-width="1.2"/><circle cx="' + selectedX.toFixed(1) + '" cy="30" r="7" fill="' + css('--void', '#0c0c0c') + '" stroke="' + css('--gold', '#c4a56a') + '"/><text x="' + selectedX.toFixed(1) + '" y="33.5" text-anchor="middle" fill="' + css('--ink', '#d5d0c4') + '" font-size="8" font-family="IBM Plex Mono, monospace">' + selected + '</text>';
+    var extra = '';
+    if (half && half !== selected) {
+      var halfX = ((half - 1) / Math.max(1, daysInMonth - 1)) * (width - 8) + 4;
+      extra = '<circle cx="' + halfX.toFixed(1) + '" cy="30" r="3" fill="none" stroke="' + rgba(css('--ink', '#d5d0c4'), 0.4) + '"/>';
+    }
+    return '<svg class="ruler-svg" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true">' + ticks + labels + extra + marker + '</svg>';
+  }
+
+  global.LineGridCharts = { spark: spark, bars: bars, stacked: stacked, wave: wave, ruler: ruler };
 })(window);

@@ -6,7 +6,14 @@
   <meta name="description" content="Line Grid theme for Komari Monitor">
   <title>Komari · Line Grid</title>
   <script>
-    (function(){var v=localStorage.getItem('komari-line-grid-theme');var t=v==='light'||v==='dark'?v:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t;})();
+    (function(){
+      var appearance=localStorage.getItem('appearance');
+      var custom=localStorage.getItem('komari-line-grid-theme')||localStorage.getItem('mmwx-theme');
+      var mode=custom==='light'||custom==='dark'?custom:(appearance==='light'||appearance==='dark'?appearance:null);
+      var theme=mode||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+      document.documentElement.setAttribute('data-theme',theme);
+      document.documentElement.style.colorScheme=theme;
+    })();
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -43,15 +50,15 @@
           <p class="window-kicker" id="win-kicker">Node / Detail</p>
           <h2 id="win-title">节点</h2>
         </div>
+        <nav class="stage-nav" id="stage-nav" aria-label="节点详情页面">
+          <button type="button" data-page="overview" class="is-on">Overview</button>
+          <button type="button" data-page="ping">Latency</button>
+          <button type="button" data-page="traffic">Traffic</button>
+          <button type="button" data-page="routes">Return</button>
+          <button type="button" data-page="system">System</button>
+        </nav>
         <button class="window-x" id="win-close" type="button" aria-label="关闭">×</button>
       </header>
-      <nav class="stage-tabs" id="stage-tabs" aria-label="节点详情页面">
-        <button data-page="overview" class="is-on">Overview</button>
-        <button data-page="ping">Latency</button>
-        <button data-page="traffic">Traffic</button>
-        <button data-page="routes">Return</button>
-        <button data-page="system">System</button>
-      </nav>
       <div class="stage-body" id="win-body"></div>
     </section>
   </div>
