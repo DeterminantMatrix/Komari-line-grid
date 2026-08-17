@@ -2,7 +2,7 @@
   "name": "Line Grid",
   "short": "line-grid",
   "description": "A faithful Line Grid port for Komari Monitor, using native RPC2 metrics with optional UUID metadata extensions.",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "author": "line-grid theme contributors / DeterminantMatrix",
   "url": "https://github.com/DeterminantMatrix/Komari-line-grid",
   "configuration": {

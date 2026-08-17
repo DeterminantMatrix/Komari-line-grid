@@ -97,10 +97,13 @@ context.window.KomariLineGridAPI.snapshot().then(snapshot => {
 }).then(snapshot => {
   assert.equal(metricCalls, 1, 'traffic history should load only after first snapshot');
   const online = snapshot.servers.find(node => node.uuid === 'u-1');
-  assert.equal(online.traffic_source, 'metric');
-  assert.equal(online.traffic_used, 400);
-  assert.equal(online.traffic_used_up, 100);
-  assert.equal(online.traffic_used_down, 300);
+  assert.equal(online.traffic_source, 'live_total', 'partial metric history must not replace Komari cumulative traffic');
+  assert.equal(online.traffic_used, 4000);
+  assert.equal(online.traffic_used_up, 1000);
+  assert.equal(online.traffic_used_down, 3000);
+  assert.equal(online.traffic_history_source, 'metric');
+  assert.equal(online.daily_traffic.length, 1);
+  assert.equal(online.daily_traffic[0].total, 400);
   return context.window.KomariLineGridAPI.getPingHistory('u-1', 1, 1);
 }).then(history => {
   assert.equal(history.records[0].value, 35);

@@ -352,9 +352,45 @@
 
   function wrapLon(value) { return ((value + 180) % 360 + 360) % 360 - 180; }
 
+  var COUNTRY_SPREAD = {
+    US: [12, 6], CN: [8, 5], CA: [10, 5], AU: [9, 5], RU: [14, 6], BR: [9, 5],
+    JP: [3.5, 2.5], KR: [2.3, 1.7], TW: [1.8, 1.3], HK: [1.2, 0.9], SG: [1.1, 0.8],
+    GB: [2.8, 2.2], DE: [3.2, 2.2], NL: [1.8, 1.3], FR: [3.2, 2.4]
+  };
+
+  function stableHash(value) {
+    var text = String(value || '');
+    var hash = 2166136261;
+    for (var i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
   function coordFor(server) {
     if (isNum(server.longitude) && isNum(server.latitude)) return [Number(server.longitude), Number(server.latitude)];
-    return COUNTRY_LL[server.region_country] || [80, 30];
+    var country = server.region_country || '';
+    var base = COUNTRY_LL[country];
+    if (!base) return null;
+    var spread = COUNTRY_SPREAD[country] || [4, 2.8];
+    var hash = stableHash(server.uuid || server.name);
+    var angle = ((hash % 3600) / 3600) * Math.PI * 2;
+    var ring = 0.24 + (((hash >>> 12) % 1000) / 1000) * 0.76;
+    return [
+      base[0] + Math.cos(angle) * spread[0] * ring,
+      Math.max(-78, Math.min(78, base[1] + Math.sin(angle) * spread[1] * ring))
+    ];
+  }
+
+  function regionLabel(server) {
+    var country = String(server.region_country || '').trim();
+    var detail = String(server.region_city || server.region_name || '').trim();
+    var normalized = detail.toUpperCase().replace(/[\s._-]+/g, '');
+    var cc = country.toUpperCase();
+    if (!detail || normalized === cc || normalized === cc + cc) detail = '';
+    if (!country) return detail || '未知';
+    return detail ? country + ' · ' + detail : country;
   }
 
   function globeCaption() {
@@ -373,6 +409,7 @@
     var items = [];
     state.servers.forEach(function (server, index) {
       var ll = coordFor(server);
+      if (!ll) return;
       var point = project(ll[0], ll[1]);
       if (!point) return;
       var label = (server.region_country || '') + ' · ' + server.name;
@@ -489,7 +526,7 @@
     var regions = {};
     var order = [];
     state.servers.forEach(function (server) {
-      var key = (server.region_country || '--') + ' · ' + (server.region_city || server.region_name || '');
+      var key = regionLabel(server);
       if (!Object.prototype.hasOwnProperty.call(regions, key)) order.push(key);
       regions[key] = (regions[key] || 0) + 1;
     });
@@ -764,7 +801,7 @@
     var rows = server.daily_traffic || [];
     var routes = server.return_routes || [];
     var note = server.online ? '在线' : (server.has_live ? '离线' : '离线 · 暂无最新上报');
-    return '<article class="sheet" data-node="' + esc(server.uuid) + '"><header class="sheet-head"><div class="hero-sub">' + note + ' · ' + esc(server.region_name || server.region_city || '') + (server.provider_name ? ' · ' + esc(server.provider_name) : '') + ' · 在线 <span data-live="uptime">' + fmtDays(server.uptime) + '</span></div><div class="ms-xl"><span data-live="ping-plain">' + (pingMs(server) == null ? '—' : Math.round(pingMs(server))) + '</span><small>MS</small></div></header>' + Charts.wave({ w: 960, h: 36 }) + '<section class="kpi"><article><div class="lbl">下行</div><div class="val" data-live="down">' + fmtSpeed(server.download_speed) + '</div><div class="sub">上行 <span data-live="up">' + fmtSpeed(server.upload_speed) + '</span></div></article><article><div class="lbl">CPU</div><div class="val" data-live="cpu">' + (isNum(server.cpu_pct) ? Math.round(server.cpu_pct) + '%' : '—') + '</div><div class="sub">负载 <span data-live="load">' + esc(server.loadavg || '—') + '</span></div></article><article><div class="lbl">内存</div><div class="val" data-live="mem">' + pctText(server.mem_used, server.mem_total) + '</div><div class="sub">' + fmtBytes(server.mem_used, 1) + ' / ' + fmtBytes(server.mem_total, 0) + '</div></article><article><div class="lbl">硬盘</div><div class="val" data-live="disk">' + pctText(server.disk_used, server.disk_total) + '</div><div class="sub">' + fmtBytes(server.disk_used, 1) + ' / ' + fmtBytes(server.disk_total, 0) + '</div></article><article><div class="lbl">周期流量</div><div class="val">' + fmtBytes(server.traffic_used, 1) + '</div><div class="sub">限额 ' + fmtBytes(server.traffic_limit, 2) + '</div></article></section><section class="sheet-mid"><div class="panel tight"><div class="panel-h"><h3>延迟</h3>' + rangeButtons() + '</div>' + detailTargetButtons(server) + detailSeriesChart(server, 520, 88) + '</div><div class="panel tight"><div class="panel-h"><h3>近 7 日</h3><span class="hero-sub">均 ' + fmtBytes(stats.avg, 1) + ' · 高 ' + fmtBytes(stats.high, 1) + '</span></div>' + Charts.bars(rows, { w: 320, h: 88, tips: trafficTips(rows) }) + '<div class="day-inline">' + rows.map(function (row) { return '<span>' + esc(row.date.slice(8)) + ' ' + fmtBytes(row.total, 1) + '</span>'; }).join('') + '</div></div></section><section class="sheet-bot"><div class="panel tight"><div class="panel-h"><h3>三网回程</h3></div><div class="routes compact">' + (routes.length ? routes.map(function (route) { return '<div class="route"><span class="car">' + esc(CARRIER[route.carrier] || route.carrier || 'route') + '</span><span>' + esc(route.route_type || '—') + (route.region ? ' · ' + esc(route.region) : '') + '</span></div>'; }).join('') : '<div class="hero-sub">暂无回程数据；可在扩展元数据层补充。</div>') + '</div></div><div class="panel tight"><div class="panel-h"><h3>系统</h3></div><div class="sys-grid"><div>系统 <b>' + esc(server.os || '—') + '</b></div><div>内核 <b>' + esc(server.kernel || '—') + '</b></div><div>架构 <b>' + esc(server.arch || '—') + '</b></div><div>CPU <b>' + esc(server.cpu_model || '—') + ' · ' + esc(server.cpu_cores || '—') + 'C/' + esc(server.cpu_threads || '—') + 'T</b></div><div>到期 <b>' + esc(server.expires_at || '—') + '</b></div><div>续费 <b>' + esc(fmtRenewal(server)) + '</b></div></div></div></section></article>';
+    return '<article class="sheet" data-node="' + esc(server.uuid) + '"><header class="sheet-head"><div class="hero-sub">' + note + ' · ' + esc(server.region_name || server.region_city || '') + (server.provider_name ? ' · ' + esc(server.provider_name) : '') + ' · 在线 <span data-live="uptime">' + fmtDays(server.uptime) + '</span></div><div class="ms-xl"><span data-live="ping-plain">' + (pingMs(server) == null ? '—' : Math.round(pingMs(server))) + '</span><small>MS</small></div></header>' + Charts.wave({ w: 960, h: 36 }) + '<section class="kpi"><article><div class="lbl">下行</div><div class="val" data-live="down">' + fmtSpeed(server.download_speed) + '</div><div class="sub">上行 <span data-live="up">' + fmtSpeed(server.upload_speed) + '</span></div></article><article><div class="lbl">CPU</div><div class="val" data-live="cpu">' + (isNum(server.cpu_pct) ? Math.round(server.cpu_pct) + '%' : '—') + '</div><div class="sub">负载 <span data-live="load">' + esc(server.loadavg || '—') + '</span></div></article><article><div class="lbl">内存</div><div class="val" data-live="mem">' + pctText(server.mem_used, server.mem_total) + '</div><div class="sub">' + fmtBytes(server.mem_used, 1) + ' / ' + fmtBytes(server.mem_total, 0) + '</div></article><article><div class="lbl">硬盘</div><div class="val" data-live="disk">' + pctText(server.disk_used, server.disk_total) + '</div><div class="sub">' + fmtBytes(server.disk_used, 1) + ' / ' + fmtBytes(server.disk_total, 0) + '</div></article><article><div class="lbl">周期流量</div><div class="val">' + fmtBytes(server.traffic_used, 1) + '</div><div class="sub">限额 ' + fmtBytes(server.traffic_limit, 2) + '</div></article></section><section class="sheet-mid"><div class="panel tight"><div class="panel-h"><h3>延迟</h3>' + rangeButtons() + '</div>' + detailTargetButtons(server) + mergedLegend(server) + detailSeriesChart(server, 520, 88) + '</div><div class="panel tight"><div class="panel-h"><h3>近 7 日</h3><span class="hero-sub">均 ' + fmtBytes(stats.avg, 1) + ' · 高 ' + fmtBytes(stats.high, 1) + '</span></div>' + Charts.bars(rows, { w: 320, h: 88, tips: trafficTips(rows) }) + '<div class="day-inline">' + rows.map(function (row) { return '<span>' + esc(row.date.slice(8)) + ' ' + fmtBytes(row.total, 1) + '</span>'; }).join('') + '</div></div></section><section class="sheet-bot"><div class="panel tight"><div class="panel-h"><h3>三网回程</h3></div><div class="routes compact">' + (routes.length ? routes.map(function (route) { return '<div class="route"><span class="car">' + esc(CARRIER[route.carrier] || route.carrier || 'route') + '</span><span>' + esc(route.route_type || '—') + (route.region ? ' · ' + esc(route.region) : '') + '</span></div>'; }).join('') : '<div class="hero-sub">暂无回程数据；可在扩展元数据层补充。</div>') + '</div></div><div class="panel tight"><div class="panel-h"><h3>系统</h3></div><div class="sys-grid"><div>系统 <b>' + esc(server.os || '—') + '</b></div><div>内核 <b>' + esc(server.kernel || '—') + '</b></div><div>架构 <b>' + esc(server.arch || '—') + '</b></div><div>CPU <b>' + esc(server.cpu_model || '—') + ' · ' + esc(server.cpu_cores || '—') + 'C/' + esc(server.cpu_threads || '—') + 'T</b></div><div>到期 <b>' + esc(server.expires_at || '—') + '</b></div><div>续费 <b>' + esc(fmtRenewal(server)) + '</b></div></div></div></section></article>';
   }
 
   function detailPing(server) {
@@ -772,10 +809,24 @@
     return '<article class="page page-ping" data-node="' + esc(server.uuid) + '"><div class="panel-h"><h3>Latency / Packet Loss</h3>' + rangeButtons() + '</div>' + detailTargetButtons(server) + mergedLegend(server) + '<div class="chart-fill detail-chart">' + (ready ? detailSeriesChart(server, 960, 260) : '<div class="chart-empty">正在读取历史数据…</div>') + '</div><section class="kpi ping-kpi">' + (server.ping || []).slice(0, 5).map(function (ping) { return '<article><div class="lbl">' + esc(ping.label) + '</div><div class="val">' + (ping.current_ms < 0 ? '—' : Math.round(ping.current_ms) + 'ms') + '</div><div class="sub">loss ' + Number(ping.loss_pct || 0).toFixed(2) + '% · avg ' + (isNum(ping.avg_ms) ? Math.round(ping.avg_ms) : '—') + '</div></article>'; }).join('') + '</section></article>';
   }
 
+  function trafficSourceText(server) {
+    if (server.traffic_source === 'metric') return 'Komari traffic.up/down';
+    if (server.traffic_source === 'records') return server.traffic_history_partial ? 'Komari 历史记录 · 部分周期' : 'Komari 历史记录';
+    if (server.traffic_source === 'live_total') return 'Komari Agent 累计流量';
+    return '暂无流量来源';
+  }
+
+  function trafficPeriodText(server) {
+    return server.traffic_source === 'metric' || server.traffic_source === 'records' && !server.traffic_history_partial ? '本周期' : '累计';
+  }
+
   function detailTraffic(server) {
     var stats = dailyStats(server);
     var rows = server.daily_traffic || [];
-    return '<article class="page page-traffic">' + quotaBar(server) + '<section class="kpi"><article><div class="lbl">已用</div><div class="val">' + fmtBytes(server.traffic_used, 1) + '</div><div class="sub">限额 ' + fmtBytes(server.traffic_limit, 1) + '</div></article><article><div class="lbl">上行</div><div class="val">' + fmtBytes(server.traffic_used_up, 1) + '</div><div class="sub">本周期</div></article><article><div class="lbl">下行</div><div class="val">' + fmtBytes(server.traffic_used_down, 1) + '</div><div class="sub">本周期</div></article><article><div class="lbl">最高日</div><div class="val">' + fmtBytes(stats.high, 1) + '</div><div class="sub">日均 ' + fmtBytes(stats.avg, 1) + '</div></article><article><div class="lbl">周期</div><div class="val">' + esc(server.period_start ? server.period_start.slice(5) : '—') + '</div><div class="sub">至 ' + esc(server.period_end ? server.period_end.slice(5) : '—') + '</div></article></section><div class="chart-fill traffic-chart"><div class="panel-h"><h3>近 7 日流量</h3><span class="hero-sub">Komari traffic.up/down</span></div>' + Charts.stacked(rows, { w: 960, h: 220, tips: trafficTips(rows) }) + '</div><section class="day-grid">' + rows.map(function (row) { return '<article><div class="lbl">' + esc(row.date.slice(5)) + '</div><div class="val">' + fmtBytes(row.total, 1) + '</div><div class="hero-sub">↑ ' + fmtBytes(row.uplink, 1) + ' · ↓ ' + fmtBytes(row.downlink, 1) + '</div></article>'; }).join('') + '</section></article>';
+    var source = trafficSourceText(server);
+    var periodCopy = trafficPeriodText(server);
+    var historyNote = server.traffic_history_note || (rows.length ? source : '当前仅有累计流量；Komari 未返回可用的历史记录。');
+    return '<article class="page page-traffic">' + quotaBar(server) + '<section class="kpi"><article><div class="lbl">已用</div><div class="val">' + fmtBytes(server.traffic_used, 1) + '</div><div class="sub">限额 ' + fmtBytes(server.traffic_limit, 1) + '</div></article><article><div class="lbl">上行</div><div class="val">' + fmtBytes(server.traffic_used_up, 1) + '</div><div class="sub">' + periodCopy + '</div></article><article><div class="lbl">下行</div><div class="val">' + fmtBytes(server.traffic_used_down, 1) + '</div><div class="sub">' + periodCopy + '</div></article><article><div class="lbl">最高日</div><div class="val">' + fmtBytes(stats.high, 1) + '</div><div class="sub">日均 ' + fmtBytes(stats.avg, 1) + '</div></article><article><div class="lbl">周期</div><div class="val">' + esc(server.period_start ? server.period_start.slice(5) : '—') + '</div><div class="sub">至 ' + esc(server.period_end ? server.period_end.slice(5) : '—') + '</div></article></section><div class="chart-fill traffic-chart"><div class="panel-h"><h3>近 7 日流量</h3><span class="hero-sub">' + esc(source) + '</span></div>' + Charts.stacked(rows, { w: 960, h: 220, tips: trafficTips(rows) }) + '<div class="traffic-note hero-sub">' + esc(historyNote) + '</div></div><section class="day-grid">' + rows.map(function (row) { return '<article><div class="lbl">' + esc(row.date.slice(5)) + '</div><div class="val">' + fmtBytes(row.total, 1) + '</div><div class="hero-sub">↑ ' + fmtBytes(row.uplink, 1) + ' · ↓ ' + fmtBytes(row.downlink, 1) + '</div></article>'; }).join('') + '</section></article>';
   }
 
   function detailRoutes(server) {
@@ -792,8 +843,9 @@
     var server = nodeByUuid(uuid);
     if (!server) { hideWindow(); return; }
     page = PAGES.indexOf(page) >= 0 ? page : 'overview';
-    if (!detailTargetKey && server.ping && server.ping[0]) detailTargetKey = server.ping[0].key;
-    if (detailTargetKey && !server.ping.some(function (ping) { return ping.key === detailTargetKey; })) detailTargetKey = server.ping[0] ? server.ping[0].key : '';
+    if (!detailTargetKey && server.ping && server.ping.length > 1) detailTargetKey = 'merge';
+    else if (!detailTargetKey && server.ping && server.ping[0]) detailTargetKey = server.ping[0].key;
+    if (detailTargetKey !== 'merge' && detailTargetKey && !server.ping.some(function (ping) { return ping.key === detailTargetKey; })) detailTargetKey = server.ping[0] ? server.ping[0].key : '';
     winTitle.textContent = server.name;
     winKicker.textContent = (server.region_country || 'NODE') + ' / ' + (server.region_city || server.region_name || 'DETAIL');
     Array.prototype.forEach.call(stageNav.querySelectorAll('[data-page]'), function (button) { button.classList.toggle('is-on', button.dataset.page === page); });

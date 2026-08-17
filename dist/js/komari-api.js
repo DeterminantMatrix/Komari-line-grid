@@ -277,6 +277,9 @@
       traffic_source: liveTotals.available ? 'live_total' : 'none',
       traffic_live_up: liveTotals.up,
       traffic_live_down: liveTotals.down,
+      traffic_history_source: 'none',
+      traffic_history_partial: false,
+      traffic_history_note: liveTotals.available ? '当前显示 Komari Agent 累计流量；历史记录正在读取。' : '',
       period_start: '',
       period_end: '',
       cpu_pct: hasLive ? numberOrNull(live.cpu) : null,
@@ -341,14 +344,17 @@
     }).then(function (result) {
       if (!result || !Array.isArray(result.series)) throw new Error('Metric response missing series');
       var by = {};
-      ids.forEach(function (id) { by[id] = { up: 0, down: 0, days: {}, seen: false }; });
+      ids.forEach(function (id) { by[id] = { up: 0, down: 0, days: {}, seen: false, retention_days: null }; });
       result.series.forEach(function (series) {
         var id = series.entity_id;
         if (!by[id]) return;
         var isUp = series.metric_key === 'traffic.up';
         if (!isUp && series.metric_key !== 'traffic.down') return;
-        by[id].seen = true;
-        (series.points || []).forEach(function (point) {
+        var points = series.points || [];
+        if (points.length) by[id].seen = true;
+        var retention = numberOrNull(series.retention_days);
+        if (retention != null) by[id].retention_days = by[id].retention_days == null ? retention : Math.min(by[id].retention_days, retention);
+        points.forEach(function (point) {
           var value = numberOrNull(point.value);
           if (value == null) return;
           var day = String(point.time || '').slice(0, 10);
@@ -365,6 +371,83 @@
     });
   }
 
+  function trafficRowsFromNetworkRecords(records) {
+    records = (records || []).slice().sort(function (a, b) { return new Date(a.time) - new Date(b.time); });
+    if (records.length < 2) return { rows: [], first: records[0] && records[0].time || '', last: records[records.length - 1] && records[records.length - 1].time || '' };
+    var days = {};
+    var previous = records[0];
+    for (var i = 1; i < records.length; i += 1) {
+      var current = records[i];
+      var prevUp = numberOrNull(previous.net_total_up);
+      var prevDown = numberOrNull(previous.net_total_down);
+      var curUp = numberOrNull(current.net_total_up);
+      var curDown = numberOrNull(current.net_total_down);
+      previous = current;
+      if (curUp == null && curDown == null) continue;
+      var up = curUp == null || prevUp == null ? 0 : curUp - prevUp;
+      var down = curDown == null || prevDown == null ? 0 : curDown - prevDown;
+      if (up < 0) up = Math.max(0, curUp || 0);
+      if (down < 0) down = Math.max(0, curDown || 0);
+      if (!Number.isFinite(up) || !Number.isFinite(down)) continue;
+      var day = String(current.time || '').slice(0, 10);
+      if (!day) continue;
+      var row = days[day] || (days[day] = { date: day, up: 0, down: 0, total: 0 });
+      row.up += up;
+      row.down += down;
+      row.total = row.up + row.down;
+    }
+    return {
+      rows: Object.keys(days).sort().map(function (key) { return days[key]; }),
+      first: records[0] && records[0].time || '',
+      last: records[records.length - 1] && records[records.length - 1].time || ''
+    };
+  }
+
+  function loadTrafficFromRecords(servers, hours) {
+    return rpc('common:getRecords', {
+      type: 'load', hours: hours || 192, load_type: 'network', maxCount: 16000
+    }, 15000).then(function (result) {
+      var grouped = result && result.records || {};
+      var now = new Date();
+      var any = false;
+      servers.forEach(function (server) {
+        var parsed = trafficRowsFromNetworkRecords(grouped[server.uuid] || []);
+        if (!parsed.rows.length) return;
+        any = true;
+        var start = periodStart(server.traffic_reset_day, now);
+        var firstTime = parsed.first ? new Date(parsed.first) : null;
+        var coversPeriod = firstTime && Number.isFinite(firstTime.getTime()) && firstTime.getTime() <= start.getTime() + 2 * 3600000;
+        var up = 0;
+        var down = 0;
+        parsed.rows.forEach(function (row) {
+          if (new Date(row.date + 'T23:59:59Z').getTime() >= start.getTime()) {
+            up += row.up;
+            down += row.down;
+          }
+        });
+        server.traffic_history = parsed.rows.map(function (row) { return { date: row.date, uplink: row.up, downlink: row.down, total: row.total }; });
+        server.daily_traffic = server.traffic_history.slice(-7);
+        server.traffic_history_source = 'records';
+        server.traffic_history_partial = !coversPeriod;
+        server.traffic_history_note = server.daily_traffic.length >= 7 ? '已从 Komari 网络累计记录还原近 7 日流量。' : 'Komari 当前只返回约 ' + server.daily_traffic.length + ' 天可用历史；图表按现有记录展示。';
+        if (coversPeriod) {
+          server.traffic_available = true;
+          server.traffic_source = 'records';
+          server.traffic_used_up = up;
+          server.traffic_used_down = down;
+          server.traffic_used_total = up + down;
+          server.traffic_used = trafficValue(up, down, server.traffic_limit_type);
+          server.period_start = start.toISOString().slice(0, 10);
+          var periodEnd = new Date(start);
+          periodEnd.setMonth(periodEnd.getMonth() + 1);
+          server.period_end = periodEnd.toISOString().slice(0, 10);
+        }
+      });
+      if (!any) throw new Error('No network history records');
+      return servers;
+    });
+  }
+
   function loadTraffic(servers) {
     if (!servers || !servers.length) return Promise.resolve(servers || []);
     var now = new Date();
@@ -375,67 +458,65 @@
     });
     var seven = new Date(Date.now() - 8 * 86400000);
     if (seven < earliest) earliest = seven;
+    var requestedHours = Math.min(24 * 35, Math.max(192, Math.ceil((Date.now() - earliest.getTime()) / 3600000) + 24));
 
     return trafficWindow(servers, earliest).then(function (by) {
+      var anyMetric = false;
       servers.forEach(function (server) {
         var bucket = by[server.uuid] || { days: {}, seen: false };
         var start = periodStart(server.traffic_reset_day, now);
-        if (!bucket.seen) {
-          if (server.traffic_source !== 'live_total') {
-            server.traffic_available = false;
-            server.traffic_used = null;
-            server.traffic_used_up = null;
-            server.traffic_used_down = null;
-            server.traffic_used_total = null;
-            server.traffic_source = 'none';
-          }
-          server.period_start = start.toISOString().slice(0, 10);
-          var missingEnd = new Date(start);
-          missingEnd.setMonth(missingEnd.getMonth() + 1);
-          server.period_end = missingEnd.toISOString().slice(0, 10);
-          server.traffic_history = [];
-          server.daily_traffic = [];
-          return;
-        }
+        if (!bucket.seen) return;
+        anyMetric = true;
         var up = 0;
         var down = 0;
         Object.keys(bucket.days || {}).forEach(function (key) {
-          if (new Date(key + 'T23:59:59') >= start) {
+          if (new Date(key + 'T23:59:59Z').getTime() >= start.getTime()) {
             up += bucket.days[key].up;
             down += bucket.days[key].down;
           }
         });
-        server.traffic_available = true;
-        server.traffic_source = 'metric';
-        server.traffic_used_up = up;
-        server.traffic_used_down = down;
-        server.traffic_used_total = up + down;
-        server.traffic_used = trafficValue(up, down, server.traffic_limit_type);
-        server.period_start = start.toISOString().slice(0, 10);
-        var end = new Date(start);
-        end.setMonth(end.getMonth() + 1);
-        server.period_end = end.toISOString().slice(0, 10);
         var rows = Object.keys(bucket.days || {}).sort().map(function (key) { return bucket.days[key]; });
-        server.traffic_history = rows.map(function (row) {
-          return { date: row.date, uplink: row.up, downlink: row.down, total: row.total };
-        });
+        var periodKey = start.toISOString().slice(0, 10);
+        var coversPeriod = rows.length && rows[0].date <= periodKey;
+        server.traffic_history_source = 'metric';
+        server.traffic_history_partial = !coversPeriod || bucket.retention_days != null && bucket.retention_days < 7;
+        server.traffic_history = rows.map(function (row) { return { date: row.date, uplink: row.up, downlink: row.down, total: row.total }; });
         server.daily_traffic = server.traffic_history.slice(-7);
-      });
-      return servers;
-    }).catch(function (error) {
-      servers.forEach(function (server) {
-        if (server.traffic_source !== 'live_total') {
-          server.traffic_available = false;
-          server.traffic_used = null;
-          server.traffic_used_up = null;
-          server.traffic_used_down = null;
-          server.traffic_used_total = null;
-          server.traffic_source = 'none';
+        if (coversPeriod || server.traffic_source !== 'live_total') {
+          server.traffic_available = true;
+          server.traffic_source = 'metric';
+          server.traffic_used_up = up;
+          server.traffic_used_down = down;
+          server.traffic_used_total = up + down;
+          server.traffic_used = trafficValue(up, down, server.traffic_limit_type);
+          server.period_start = periodKey;
+          var end = new Date(start);
+          end.setMonth(end.getMonth() + 1);
+          server.period_end = end.toISOString().slice(0, 10);
         }
-        server.daily_traffic = [];
-        server.traffic_history = [];
+        server.traffic_history_note = bucket.retention_days != null && bucket.retention_days < 7 ? 'Komari 当前 traffic 指标仅保留 ' + bucket.retention_days + ' 天；近 7 日只能展示现有历史。' : (!coversPeriod ? 'Komari 历史未覆盖完整周期；累计值沿用 Agent 数据。' : 'Komari traffic.up/down 历史数据。');
       });
-      throw error;
+      if (!anyMetric) throw new Error('Metric history empty');
+      var missing = servers.filter(function (server) { return server.traffic_history_source !== 'metric'; });
+      if (!missing.length) return servers;
+      return loadTrafficFromRecords(missing, requestedHours).catch(function () { return servers; }).then(function () { return servers; });
+    }).catch(function () {
+      return loadTrafficFromRecords(servers, requestedHours).catch(function () {
+        servers.forEach(function (server) {
+          if (server.traffic_source === 'live_total') {
+            server.traffic_history_note = '当前显示 Komari Agent 累计流量；服务端未返回可用历史记录。';
+          } else {
+            server.traffic_available = false;
+            server.traffic_source = 'none';
+            server.traffic_history_note = 'Komari 未返回可用流量数据。';
+          }
+          server.daily_traffic = [];
+          server.traffic_history = [];
+          server.traffic_history_source = 'none';
+          server.traffic_history_partial = true;
+        });
+        return servers;
+      });
     });
   }
 

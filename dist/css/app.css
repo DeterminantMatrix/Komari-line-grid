@@ -386,3 +386,5 @@ html[data-theme="light"] .overlay { background: rgba(228,211,174,.78); }
   .cell:hover, .row:hover, .slab:hover { background: transparent; box-shadow: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.traffic-note { margin-top: 12px; line-height: 1.6; }
