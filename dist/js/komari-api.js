@@ -5,13 +5,17 @@
   var endpoint = '/api/rpc2';
   var metaCache = null;
 
-  function rpc(method, params) {
+  function rpc(method, params, timeoutMs) {
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timeout = Number(timeoutMs) > 0 ? Number(timeoutMs) : 8000;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, timeout) : null;
     return fetch(endpoint, {
       method: 'POST',
       credentials: 'same-origin',
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: seq++, method: method, params: params || {} })
+      body: JSON.stringify({ jsonrpc: '2.0', id: seq++, method: method, params: params || {} }),
+      signal: controller ? controller.signal : undefined
     })
       .then(function (response) {
         if (!response.ok) throw new Error('RPC HTTP ' + response.status);
@@ -20,7 +24,12 @@
       .then(function (payload) {
         if (payload && payload.error) throw new Error(payload.error.message || 'RPC error');
         return payload ? payload.result : null;
-      });
+      })
+      .catch(function (error) {
+        if (controller && controller.signal.aborted) throw new Error('RPC timeout: ' + method);
+        throw error;
+      })
+      .finally(function () { if (timer) clearTimeout(timer); });
   }
 
   function numberOrNull(value) {
@@ -270,7 +279,7 @@
   }
 
   function queryMetrics(params) {
-    return rpc('public:queryMetrics', params);
+    return rpc('public:queryMetrics', params, 12000);
   }
 
   function trafficWindow(servers, startOverride) {
@@ -398,7 +407,7 @@
   }
 
   function snapshot() {
-    return Promise.all([getNodes(), getLatest(), loadMetadata(), getPublicInfo()]).then(function (all) {
+    return Promise.all([getNodes(), getLatest().catch(function () { return {}; }), loadMetadata(), getPublicInfo()]).then(function (all) {
       var nodes = all[0];
       var latest = all[1];
       var metadata = all[2];
@@ -411,16 +420,14 @@
         var bw = numberOrNull(nodes[b.uuid] && nodes[b.uuid].weight) || 0;
         return bw - aw || a.name.localeCompare(b.name);
       });
-      return loadTraffic(servers).catch(function () { return servers; }).then(function () {
-        return {
-          enabled: true,
-          title: metadata.global.title || info.title,
-          description: info.description,
-          show_globe: metadata.global.show_globe !== false,
-          servers: servers,
-          metadata: metadata.global
-        };
-      });
+      return {
+        enabled: true,
+        title: metadata.global.title || info.title,
+        description: info.description,
+        show_globe: metadata.global.show_globe !== false,
+        servers: servers,
+        metadata: metadata.global
+      };
     });
   }
 

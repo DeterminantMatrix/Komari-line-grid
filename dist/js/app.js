@@ -1,8 +1,15 @@
 (function () {
   'use strict';
 
+  window.__KOMARI_LINE_GRID_APP_STARTED__ = true;
   var API = window.KomariLineGridAPI;
-  var Charts = window.LineGridCharts;
+  var Charts = window.LineGridCharts || {
+    spark: function () { return '<div class="chart-empty">图表组件未加载</div>'; },
+    bars: function () { return '<div class="chart-empty">图表组件未加载</div>'; },
+    stacked: function () { return '<div class="chart-empty">图表组件未加载</div>'; },
+    wave: function () { return ''; },
+    ruler: function () { return '';}
+  };
   var U = { KB: 1024, MB: 1024 * 1024, GB: 1024 * 1024 * 1024, TB: 1024 * 1024 * 1024 * 1024, DAY: 86400 };
 
   var main = document.getElementById('main');
@@ -989,6 +996,12 @@
   function bootstrap() {
     setTheme(currentTheme(), false);
     render();
+    if (!API || typeof API.snapshot !== 'function') {
+      loading = false;
+      error = 'Komari RPC2 适配器未加载';
+      render();
+      return;
+    }
     API.snapshot().then(function (snapshot) {
       state = snapshot;
       if (localStorage.getItem('komari-line-grid-globe') == null) showGlobe = snapshot.show_globe !== false;
@@ -996,6 +1009,8 @@
       error = '';
       lastUpdate = Date.now();
       render();
+      refreshLive();
+      refreshTraffic();
       setInterval(refreshLive, 2000);
       setInterval(refreshTraffic, 300000);
     }).catch(function (err) {

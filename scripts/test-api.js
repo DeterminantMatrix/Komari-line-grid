@@ -4,6 +4,7 @@ const assert = require('assert');
 
 const code = fs.readFileSync(__dirname + '/../dist/js/komari-api.js', 'utf8');
 const now = new Date();
+let metricCalls = 0;
 
 function rpcResult(method) {
   if (method === 'common:getNodes') return {
@@ -50,6 +51,7 @@ const context = {
       })
     };
     const req = JSON.parse(opt.body);
+    if (req.method === 'public:queryMetrics') metricCalls += 1;
     return { ok: true, json: async () => ({ jsonrpc: '2.0', id: req.id, result: rpcResult(req.method) }) };
   }
 };
@@ -62,6 +64,7 @@ vm.runInContext(code, context);
 context.window.KomariLineGridAPI.snapshot().then(snapshot => {
   assert.equal(snapshot.title, 'Test Komari');
   assert.equal(snapshot.servers.length, 2);
+  assert.equal(metricCalls, 0, 'initial snapshot must not wait for metric history');
 
   const online = snapshot.servers.find(node => node.uuid === 'u-1');
   assert.equal(online.online, true);
@@ -69,9 +72,8 @@ context.window.KomariLineGridAPI.snapshot().then(snapshot => {
   assert.equal(online.provider_name, 'Demo');
   assert.equal(online.longitude, 103.82);
   assert.equal(online.ping[0].current_ms, 35);
-  assert.equal(online.traffic_used, 400);
-  assert.equal(online.traffic_used_up, 100);
-  assert.equal(online.traffic_used_down, 300);
+  assert.equal(online.traffic_available, false);
+  assert.equal(online.traffic_used, null);
 
   const offline = snapshot.servers.find(node => node.uuid === 'u-2');
   assert.equal(offline.online, false);
@@ -87,6 +89,13 @@ context.window.KomariLineGridAPI.snapshot().then(snapshot => {
   assert.equal(offline.traffic_available, false);
   assert.equal(offline.traffic_used, null);
 
+  return context.window.KomariLineGridAPI.loadTraffic(snapshot.servers).then(() => snapshot);
+}).then(snapshot => {
+  assert.equal(metricCalls, 1, 'traffic history should load only after first snapshot');
+  const online = snapshot.servers.find(node => node.uuid === 'u-1');
+  assert.equal(online.traffic_used, 400);
+  assert.equal(online.traffic_used_up, 100);
+  assert.equal(online.traffic_used_down, 300);
   return context.window.KomariLineGridAPI.getPingHistory('u-1', 1, 1);
 }).then(history => {
   assert.equal(history.records[0].value, 35);
