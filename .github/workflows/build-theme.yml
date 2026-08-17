@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           if compgen -G 'scripts/hotfix.b64.part-*' >/dev/null; then
-            cat scripts/hotfix.b64.part-* | base64 -d > /tmp/line-grid-hotfix.patch
+            cat scripts/hotfix.b64.part-* | base64 -d | gzip -d > /tmp/line-grid-hotfix.patch
             git apply --check /tmp/line-grid-hotfix.patch
             git apply /tmp/line-grid-hotfix.patch
           fi
