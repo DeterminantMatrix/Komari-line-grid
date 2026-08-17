@@ -1,0 +1,23 @@
+{
+  "global": {
+    "title": "我的 Komari",
+    "show_globe": true
+  },
+  "nodes": {
+    "YOUR-KOMARI-NODE-UUID": {
+      "provider_name": "Example Provider",
+      "provider_url": "https://example.com",
+      "region_country": "SG",
+      "region_name": "新加坡",
+      "region_city": "Singapore",
+      "traffic_reset_day": 1,
+      "cpu_threads": 2,
+      "renewal_price_cny": 35,
+      "return_routes": [
+        { "carrier": "telecom", "region": "上海", "route_type": "CN2 GIA" },
+        { "carrier": "unicom", "region": "上海", "route_type": "AS4837" },
+        { "carrier": "mobile", "region": "广州", "route_type": "CMIN2" }
+      ]
+    }
+  }
+}

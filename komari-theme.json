@@ -1,0 +1,16 @@
+{
+  "name": "Line Grid",
+  "short": "line-grid",
+  "description": "A line-grid monitoring theme ported to Komari, with native RPC2 metrics and optional UUID metadata extensions.",
+  "version": "0.1.0",
+  "author": "line-grid theme contributors / DeterminantMatrix",
+  "url": "https://github.com/DeterminantMatrix/Komari-line-grid",
+  "configuration": {
+    "type": "managed",
+    "name": {
+      "en": "Line Grid Settings",
+      "zh-CN": "Line Grid 设置"
+    },
+    "data": []
+  }
+}

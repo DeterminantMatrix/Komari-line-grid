@@ -1,0 +1,52 @@
+name: Build Komari theme
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Restore verified app source
+        shell: bash
+        run: |
+          if [[ -f scripts/app.js.gz ]]; then
+            gzip -dc scripts/app.js.gz > dist/js/app.js
+            actual="$(git hash-object dist/js/app.js)"
+            expected="14dc694244dd5c9ea2eba388aed5cc80a95aff33"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "app.js blob mismatch: $actual != $expected" >&2
+              exit 1
+            fi
+          fi
+      - name: Validate
+        run: ./scripts/test.sh
+      - name: Package
+        run: ./scripts/package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: komari-line-grid-theme
+          path: komari-line-grid.zip
+      - name: Materialize verified app source
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        shell: bash
+        run: |
+          if [[ ! -f scripts/app.js.gz ]]; then
+            exit 0
+          fi
+          rm scripts/app.js.gz
+          git add dist/js/app.js scripts/app.js.gz
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Materialize verified app.js source'
+          git push

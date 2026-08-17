@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="description" content="Line Grid theme for Komari Monitor">
+  <title>Komari · Line Grid</title>
+  <script>
+    (function(){var v=localStorage.getItem('komari-line-grid-theme');var t=v==='light'||v==='dark'?v:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t;})();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <a class="skip" href="#main">跳到内容</a>
+  <div class="shell">
+    <header class="top">
+      <div>
+        <p class="eyebrow">Komari / Infrastructure · <span id="live-mark" class="live">连接中</span></p>
+        <h1 id="page-title">节点状态</h1>
+      </div>
+      <div class="top-tools">
+        <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换主题" title="切换主题"></button>
+        <nav class="site-nav" id="site-nav" aria-label="站点页面">
+          <button type="button" data-home="nodes" class="is-on">节点</button>
+          <button type="button" data-home="network">网络状况</button>
+          <button type="button" data-home="resource">资源概况</button>
+        </nav>
+      </div>
+    </header>
+    <main id="main" tabindex="-1"></main>
+    <footer class="foot" id="foot"></footer>
+  </div>
+
+  <div class="overlay" id="overlay" hidden>
+    <section class="stage" role="dialog" aria-modal="true" aria-labelledby="win-title">
+      <header class="stage-bar">
+        <button class="back" id="win-back" type="button">← 返回</button>
+        <div class="stage-id">
+          <p class="window-kicker" id="win-kicker">Node / Detail</p>
+          <h2 id="win-title">节点</h2>
+        </div>
+        <button class="window-x" id="win-close" type="button" aria-label="关闭">×</button>
+      </header>
+      <nav class="stage-tabs" id="stage-tabs" aria-label="节点详情页面">
+        <button data-page="overview" class="is-on">Overview</button>
+        <button data-page="ping">Latency</button>
+        <button data-page="traffic">Traffic</button>
+        <button data-page="routes">Return</button>
+        <button data-page="system">System</button>
+      </nav>
+      <div class="stage-body" id="win-body"></div>
+    </section>
+  </div>
+  <div id="chart-tip" hidden></div>
+
+  <script src="./js/charts.js"></script>
+  <script src="./js/komari-api.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
