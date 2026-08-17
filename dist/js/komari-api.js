@@ -200,14 +200,56 @@
     return values.map(function (v) { return v == null ? '—' : v.toFixed(2); }).join(' ');
   }
 
+  function trafficValue(up, down, type) {
+    up = numberOrNull(up);
+    down = numberOrNull(down);
+    if (up == null && down == null) return null;
+    up = up == null ? 0 : up;
+    down = down == null ? 0 : down;
+    if (type === 'up') return up;
+    if (type === 'down') return down;
+    if (type === 'max') return Math.max(up, down);
+    if (type === 'min') return Math.min(up, down);
+    return up + down;
+  }
+
+  function liveTrafficTotals(live) {
+    if (!hasLiveRecord(live)) return { up: null, down: null, total: null, available: false };
+    var up = firstNumber(live.net_total_out, live.net_total_up);
+    var down = firstNumber(live.net_total_in, live.net_total_down);
+    return {
+      up: up,
+      down: down,
+      total: up == null && down == null ? null : (up == null ? 0 : up) + (down == null ? 0 : down),
+      available: up != null || down != null
+    };
+  }
+
+  function applyLiveTrafficFallback(server, live) {
+    var totals = liveTrafficTotals(live);
+    server.traffic_live_up = totals.up;
+    server.traffic_live_down = totals.down;
+    if (!totals.available || server.traffic_source === 'metric') return;
+    server.traffic_available = true;
+    server.traffic_source = 'live_total';
+    server.traffic_used_up = totals.up == null ? 0 : totals.up;
+    server.traffic_used_down = totals.down == null ? 0 : totals.down;
+    server.traffic_used_total = totals.total;
+    server.traffic_used = trafficValue(totals.up, totals.down, server.traffic_limit_type);
+  }
+
   function mapNode(node, live, extension) {
     node = node || {};
     extension = extension || {};
     var hasLive = hasLiveRecord(live);
     var country = extension.region_country || countryCode(node.region);
+    var rawRegion = String(node.region || '').trim();
+    var regionName = extension.region_name || (rawRegion && rawRegion.toUpperCase() !== String(country || '').toUpperCase() ? rawRegion : '');
     var price = positiveOrNull(node.price);
     var billingDays = positiveOrNull(node.billing_cycle);
     var expiry = normalizeExpiry(node.expired_at);
+    var liveTotals = liveTrafficTotals(live);
+    var initialTraffic = trafficValue(liveTotals.up, liveTotals.down, node.traffic_limit_type || 'sum');
     return {
       uuid: node.uuid,
       name: node.name || node.uuid || '未命名',
@@ -216,7 +258,7 @@
       last_report_at: hasLive ? (live.time || live.updated_at || '') : '',
       region: node.region || '',
       region_country: country,
-      region_name: extension.region_name || node.region || country,
+      region_name: regionName,
       region_city: extension.region_city || '',
       longitude: numberOrNull(extension.longitude),
       latitude: numberOrNull(extension.latitude),
@@ -225,13 +267,16 @@
       telecom_paid_peer: !!extension.telecom_paid_peer,
       download_speed: hasLive ? numberOrNull(live.net_in) : null,
       upload_speed: hasLive ? numberOrNull(live.net_out) : null,
-      traffic_used: null,
+      traffic_used: liveTotals.available ? initialTraffic : null,
       traffic_limit: numberOrNull(node.traffic_limit) || 0,
       traffic_limit_type: node.traffic_limit_type || 'sum',
-      traffic_used_up: null,
-      traffic_used_down: null,
-      traffic_used_total: null,
-      traffic_available: false,
+      traffic_used_up: liveTotals.available ? (liveTotals.up == null ? 0 : liveTotals.up) : null,
+      traffic_used_down: liveTotals.available ? (liveTotals.down == null ? 0 : liveTotals.down) : null,
+      traffic_used_total: liveTotals.available ? liveTotals.total : null,
+      traffic_available: liveTotals.available,
+      traffic_source: liveTotals.available ? 'live_total' : 'none',
+      traffic_live_up: liveTotals.up,
+      traffic_live_down: liveTotals.down,
       period_start: '',
       period_end: '',
       cpu_pct: hasLive ? numberOrNull(live.cpu) : null,
@@ -336,11 +381,14 @@
         var bucket = by[server.uuid] || { days: {}, seen: false };
         var start = periodStart(server.traffic_reset_day, now);
         if (!bucket.seen) {
-          server.traffic_available = false;
-          server.traffic_used = null;
-          server.traffic_used_up = null;
-          server.traffic_used_down = null;
-          server.traffic_used_total = null;
+          if (server.traffic_source !== 'live_total') {
+            server.traffic_available = false;
+            server.traffic_used = null;
+            server.traffic_used_up = null;
+            server.traffic_used_down = null;
+            server.traffic_used_total = null;
+            server.traffic_source = 'none';
+          }
           server.period_start = start.toISOString().slice(0, 10);
           var missingEnd = new Date(start);
           missingEnd.setMonth(missingEnd.getMonth() + 1);
@@ -358,14 +406,11 @@
           }
         });
         server.traffic_available = true;
+        server.traffic_source = 'metric';
         server.traffic_used_up = up;
         server.traffic_used_down = down;
         server.traffic_used_total = up + down;
-        if (server.traffic_limit_type === 'up') server.traffic_used = up;
-        else if (server.traffic_limit_type === 'down') server.traffic_used = down;
-        else if (server.traffic_limit_type === 'max') server.traffic_used = Math.max(up, down);
-        else if (server.traffic_limit_type === 'min') server.traffic_used = Math.min(up, down);
-        else server.traffic_used = up + down;
+        server.traffic_used = trafficValue(up, down, server.traffic_limit_type);
         server.period_start = start.toISOString().slice(0, 10);
         var end = new Date(start);
         end.setMonth(end.getMonth() + 1);
@@ -379,11 +424,14 @@
       return servers;
     }).catch(function (error) {
       servers.forEach(function (server) {
-        server.traffic_available = false;
-        server.traffic_used = null;
-        server.traffic_used_up = null;
-        server.traffic_used_down = null;
-        server.traffic_used_total = null;
+        if (server.traffic_source !== 'live_total') {
+          server.traffic_available = false;
+          server.traffic_used = null;
+          server.traffic_used_up = null;
+          server.traffic_used_down = null;
+          server.traffic_used_total = null;
+          server.traffic_source = 'none';
+        }
         server.daily_traffic = [];
         server.traffic_history = [];
       });
@@ -418,7 +466,7 @@
       servers.sort(function (a, b) {
         var aw = numberOrNull(nodes[a.uuid] && nodes[a.uuid].weight) || 0;
         var bw = numberOrNull(nodes[b.uuid] && nodes[b.uuid].weight) || 0;
-        return bw - aw || a.name.localeCompare(b.name);
+        return aw - bw;
       });
       return {
         enabled: true,
@@ -453,6 +501,7 @@
         server.disk_total = firstNumber(live && live.disk_total, server.disk_total);
         server.uptime = hasLive ? numberOrNull(live.uptime) : null;
         server.ping = hasLive ? mapPing(live.ping, server.ping) : [];
+        applyLiveTrafficFallback(server, live);
       });
       return state;
     });

@@ -171,6 +171,9 @@ html[data-theme="light"] .grain::after { opacity: .016; }
 .lead { color: var(--ink-dim); margin: 0 0 20px; font-size: 14px; }
 .server-pick { margin-bottom: 16px; }
 .pick, .targets { display: flex; flex-wrap: wrap; gap: 8px; }
+.line-legend { display:flex; flex-wrap:wrap; gap:14px; margin:10px 0 2px; color:var(--ink-dim); font-size:11px; }
+.line-legend span { display:inline-flex; align-items:center; gap:6px; }
+.line-legend i { width:18px; height:1px; display:inline-block; }
 .chip { border: 1px solid var(--line); font-size: 12px; padding: 5px 9px; color: var(--ink-dim); }
 .chip.is-on, .chip:hover { border-color: var(--line-strong); }
 .kpi { display: grid; grid-template-columns: repeat(5,1fr); border: 1px solid var(--line); }

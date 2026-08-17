@@ -5,6 +5,7 @@
   var API = window.KomariLineGridAPI;
   var Charts = window.LineGridCharts || {
     spark: function () { return '<div class="chart-empty">图表组件未加载</div>'; },
+    multiSpark: function () { return '<div class="chart-empty">图表组件未加载</div>'; },
     bars: function () { return '<div class="chart-empty">图表组件未加载</div>'; },
     stacked: function () { return '<div class="chart-empty">图表组件未加载</div>'; },
     wave: function () { return ''; },
@@ -45,10 +46,11 @@
   var trafficBusy = false;
 
   var COUNTRY_LL = {
-    HK: [114.2, 22.3], JP: [139.7, 35.7], SG: [103.82, 1.35], US: [-98, 38], DE: [10.4, 51],
-    NL: [5.3, 52.1], GB: [-2, 54], FR: [2.3, 46.2], KR: [127.8, 36], TW: [121, 23.7], AU: [134, -25],
-    CA: [-106, 56], CN: [104, 35], TH: [100.9, 15.7], MY: [102.3, 4.2], ID: [118, -2], VN: [108, 16],
-    IN: [79, 22], AE: [54, 24], RU: [90, 60], BR: [-52, -10]
+    HK: [114.2, 22.3], JP: [139.7, 35.7], DE: [8.7, 50.1], NL: [4.9, 52.4],
+    US: [-118.2, 34.05], TW: [121.56, 25.03], AU: [151.21, -33.87], SG: [103.82, 1.35],
+    KR: [126.98, 37.57], GB: [-0.13, 51.51], FR: [2.35, 48.86], CN: [121.47, 31.23],
+    CA: [-123.12, 49.28], TH: [100.5, 13.75], MY: [101.69, 3.14], ID: [106.85, -6.21],
+    VN: [106.63, 10.82], IN: [77.21, 28.61], AE: [55.27, 25.2], RU: [37.62, 55.75], BR: [-46.63, -23.55]
   };
   var CARRIER = { telecom: '电信', unicom: '联通', mobile: '移动' };
   var PAGES = ['overview', 'ping', 'traffic', 'routes', 'system'];
@@ -65,6 +67,14 @@
   function css(name, fallback) {
     var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     return value || fallback;
+  }
+
+  function hexToRgba(hex, alpha) {
+    var raw = String(hex || '').replace('#', '').trim();
+    if (raw.length === 3) raw = raw[0] + raw[0] + raw[1] + raw[1] + raw[2] + raw[2];
+    var n = parseInt(raw, 16);
+    if (!Number.isFinite(n)) return 'rgba(213,208,196,' + alpha + ')';
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha + ')';
   }
 
   function pad(value) { return String(value).padStart(2, '0'); }
@@ -361,15 +371,18 @@
 
   function layoutGlobeLabels(cx, project) {
     var items = [];
-    state.servers.forEach(function (server) {
+    state.servers.forEach(function (server, index) {
       var ll = coordFor(server);
       var point = project(ll[0], ll[1]);
       if (!point) return;
       var label = (server.region_country || '') + ' · ' + server.name;
-      items.push({ uuid: server.uuid, server: server, px: point.x, py: point.y, label: label, w: labelWidth(label) });
+      items.push({ uuid: server.uuid, order: index, server: server, px: point.x, py: point.y, label: label, w: labelWidth(label) });
     });
     var buckets = {};
-    items.forEach(function (item) { var key = item.server.region_country || '?'; (buckets[key] = buckets[key] || []).push(item); });
+    items.forEach(function (item) {
+      var key = item.server.region_country || '?';
+      (buckets[key] = buckets[key] || []).push(item);
+    });
     Object.keys(buckets).forEach(function (key) {
       var group = buckets[key];
       if (group.length < 2) return;
@@ -387,8 +400,8 @@
       if (side === 'L' && item.w > 64) side = 'R';
       (side === 'L' ? left : right).push(item);
     });
-    function stack(list, x, end) {
-      list.sort(function (a, b) { return a.py - b.py || a.label.localeCompare(b.label); });
+    function stack(list, x, endSide) {
+      list.sort(function (a, b) { return a.py - b.py || a.order - b.order; });
       if (!list.length) return;
       var gap = list.length > 14 ? 11 : 13;
       var mean = list.reduce(function (sum, item) { return sum + item.py; }, 0) / list.length;
@@ -400,8 +413,8 @@
       list.forEach(function (item, index) {
         item.lx = x;
         item.ly = start + index * gap;
-        item.end = end;
-        globeLabelSide[item.uuid] = end ? 'L' : 'R';
+        item.end = endSide;
+        globeLabelSide[item.uuid] = endSide ? 'L' : 'R';
       });
     }
     stack(left, 70, true);
@@ -415,14 +428,18 @@
     var radius = 92;
     var lon0 = globeLon * Math.PI / 180;
     var lat0 = globeLat * Math.PI / 180;
-    var ink = css('--ink-soft', '#c4beaf');
-    var dim = css('--ink-faint', '#4a463c');
+    var ink = hexToRgba(css('--ink', '#d5d0c4'), 0.38);
+    var dim = hexToRgba(css('--ink', '#d5d0c4'), 0.14);
     function project(lonDegrees, latDegrees) {
       var lon = lonDegrees * Math.PI / 180;
       var lat = latDegrees * Math.PI / 180;
       var cosc = Math.sin(lat0) * Math.sin(lat) + Math.cos(lat0) * Math.cos(lat) * Math.cos(lon - lon0);
       if (cosc <= 0.02) return null;
-      return { x: cx + radius * Math.cos(lat) * Math.sin(lon - lon0), y: cy - radius * (Math.cos(lat0) * Math.sin(lat) - Math.sin(lat0) * Math.cos(lat) * Math.cos(lon - lon0)) };
+      return {
+        x: cx + radius * Math.cos(lat) * Math.sin(lon - lon0),
+        y: cy - radius * (Math.cos(lat0) * Math.sin(lat) - Math.sin(lat0) * Math.cos(lat) * Math.cos(lon - lon0)),
+        k: cosc
+      };
     }
     function curve(lonFixed, latFixed, from, to, step) {
       var d = '';
@@ -435,25 +452,48 @@
       }
       return d ? '<path d="' + d + '" fill="none" stroke="' + dim + '" stroke-width="0.9"/>' : '';
     }
-    var wire = '<circle class="globe-disk" cx="' + cx + '" cy="' + cy + '" r="' + radius + '" fill="transparent" stroke="' + ink + '" stroke-opacity=".42" stroke-width="1.05"/>';
+    var wire = '<defs><radialGradient id="globe-shade" cx="38%" cy="36%" r="68%"><stop offset="0%" stop-color="' + css('--ink', '#d5d0c4') + '" stop-opacity="0.05"/><stop offset="70%" stop-color="' + css('--ink', '#d5d0c4') + '" stop-opacity="0"/><stop offset="100%" stop-color="' + css('--void', '#0c0c0c') + '" stop-opacity="0.28"/></radialGradient></defs><circle class="globe-disk" cx="' + cx + '" cy="' + cy + '" r="' + radius + '" fill="url(#globe-shade)" stroke="' + ink + '" stroke-width="1.05"/>';
     for (var lon = -180; lon < 180; lon += 30) wire += curve(lon, null, -80, 80, 4);
     for (var lat = -60; lat <= 60; lat += 30) wire += curve(null, lat, -180, 180, 4);
-    wire += '<line x1="48" y1="' + (cy + radius + 16) + '" x2="288" y2="' + (cy + radius + 16) + '" stroke="' + ink + '" stroke-opacity=".42" stroke-width="1"/>';
-    var pins = layoutGlobeLabels(cx, project).map(function (item) {
+    wire += curve(null, 0, -180, 180, 3).replace('stroke-width="0.9"', 'stroke-width="1.15"');
+    var sweepLon = ((Date.now() / 28) % 360) - 180;
+    for (var sweepIndex = 0; sweepIndex < 6; sweepIndex += 1) {
+      var sweep = curve(sweepLon - sweepIndex * 8, null, -80, 80, 3);
+      if (sweep) wire += sweep.replace('stroke-width="0.9"', 'stroke-width="' + (sweepIndex === 0 ? 1.6 : 1.1) + '"').replace(dim, hexToRgba(css('--ink', '#d5d0c4'), 0.42 - sweepIndex * 0.06));
+    }
+    wire += '<line x1="48" y1="' + (cy + radius + 16) + '" x2="288" y2="' + (cy + radius + 16) + '" stroke="' + ink + '" stroke-width="1"/>';
+    var laid = layoutGlobeLabels(cx, project);
+    var links = '';
+    var online = laid.filter(function (item) { return item.server.online; });
+    online.forEach(function (a, i) {
+      online.forEach(function (b, j) {
+        if (j <= i) return;
+        if ((a.server.region_country || '') === (b.server.region_country || '')) return;
+        if ((a.order * 7 + b.order * 3) % 4 !== 1) return;
+        var mx = (a.px + b.px) / 2;
+        var my = (a.py + b.py) / 2;
+        var qx = cx + (mx - cx) * 0.42;
+        var qy = cy + (my - cy) * 0.42;
+        links += '<path class="globe-link" d="M ' + a.px.toFixed(1) + ' ' + a.py.toFixed(1) + ' Q ' + qx.toFixed(1) + ' ' + qy.toFixed(1) + ' ' + b.px.toFixed(1) + ' ' + b.py.toFixed(1) + '" fill="none" stroke="' + ink + '" stroke-width="0.55" opacity="0.32"/>';
+      });
+    });
+    var pins = laid.map(function (item) {
       var textX = item.end ? item.lx - 3 : item.lx + 3;
-      return '<g class="globe-node" data-globe-node="' + esc(item.uuid) + '"><path d="M ' + item.px.toFixed(1) + ' ' + item.py.toFixed(1) + ' L ' + item.lx.toFixed(1) + ' ' + item.ly.toFixed(1) + '" fill="none" stroke="' + ink + '" stroke-opacity=".45" stroke-width="0.75"/><circle class="globe-pin" cx="' + item.px.toFixed(1) + '" cy="' + item.py.toFixed(1) + '" r="2.1" fill="none" stroke="' + (item.server.online ? css('--live', '#8fa676') : css('--down', '#b06d52')) + '" stroke-width="1"/><text x="' + textX.toFixed(1) + '" y="' + (item.ly + 3).toFixed(1) + '" text-anchor="' + (item.end ? 'end' : 'start') + '" fill="' + css('--ink-soft', '#c4beaf') + '" font-size="8.5" font-family="IBM Plex Mono, ui-monospace, monospace" stroke="' + css('--void', '#0c0c0c') + '" stroke-width="3" paint-order="stroke" stroke-linejoin="round">' + esc(item.label) + '</text><circle class="hit" cx="' + item.px.toFixed(1) + '" cy="' + item.py.toFixed(1) + '" r="9" fill="transparent" data-uuid="' + esc(item.uuid) + '"/></g>';
+      return '<g class="globe-node" data-globe-node="' + esc(item.uuid) + '"><path d="M ' + item.px.toFixed(1) + ' ' + item.py.toFixed(1) + ' L ' + item.lx.toFixed(1) + ' ' + item.ly.toFixed(1) + '" fill="none" stroke="' + ink + '" stroke-width="0.75"/><circle class="globe-pin" cx="' + item.px.toFixed(1) + '" cy="' + item.py.toFixed(1) + '" r="2.1" fill="none" stroke="' + (item.server.online ? ink : css('--down', '#b06d52')) + '" stroke-width="1"/><text x="' + textX.toFixed(1) + '" y="' + (item.ly + 3).toFixed(1) + '" text-anchor="' + (item.end ? 'end' : 'start') + '" fill="' + css('--ink-soft', '#b8b2a4') + '" font-size="8.5" font-family="IBM Plex Mono, ui-monospace, monospace" stroke="' + css('--void', '#0c0c0c') + '" stroke-width="3" paint-order="stroke" stroke-linejoin="round">' + esc(item.label) + '</text><circle class="hit" cx="' + item.px.toFixed(1) + '" cy="' + item.py.toFixed(1) + '" r="9" fill="transparent" data-uuid="' + esc(item.uuid) + '"/></g>';
     }).join('');
-    return wire + pins + '<text x="168" y="' + (cy + radius + 28) + '" text-anchor="middle" fill="' + css('--ink-dim', '#aea89a') + '" font-size="8" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="1.4">' + globeCaption() + '</text>';
+    return wire + links + pins + '<text x="168" y="' + (cy + radius + 28) + '" text-anchor="middle" fill="' + hexToRgba(css('--ink', '#d5d0c4'), 0.28) + '" font-size="8" font-family="IBM Plex Mono, ui-monospace, monospace" letter-spacing="1.4">' + globeCaption() + '</text>';
   }
 
   function globePanel() {
     if (!showGlobe) return '';
     var regions = {};
+    var order = [];
     state.servers.forEach(function (server) {
       var key = (server.region_country || '--') + ' · ' + (server.region_city || server.region_name || '');
+      if (!Object.prototype.hasOwnProperty.call(regions, key)) order.push(key);
       regions[key] = (regions[key] || 0) + 1;
     });
-    var side = Object.keys(regions).sort().map(function (key) { return '<div class="reg"><span>' + esc(key) + '</span><b>' + regions[key] + '</b></div>'; }).join('');
+    var side = order.map(function (key) { return '<div class="reg"><span>' + esc(key) + '</span><b>' + regions[key] + '</b></div>'; }).join('');
     return '<section class="home-globe" aria-label="节点地球"><div class="atlas"><svg viewBox="0 0 420 240" preserveAspectRatio="xMidYMid meet">' + globeMarkup() + '</svg></div><aside class="atlas-side"><div class="lbl">地区</div>' + side + '</aside></section>';
   }
 
@@ -667,15 +707,51 @@
 
   function detailTargetButtons(server) {
     var targets = server.ping || [];
-    return '<div class="targets">' + targets.map(function (ping) { return '<button type="button" class="chip' + (detailTargetKey === ping.key ? ' is-on' : '') + '" data-target="' + esc(ping.key) + '">' + esc(ping.label) + ' · ' + (ping.current_ms < 0 ? '—' : Math.round(ping.current_ms) + 'ms') + '</button>'; }).join('') + '</div>';
+    var merge = targets.length > 1 ? '<button type="button" class="chip' + (detailTargetKey === 'merge' ? ' is-on' : '') + '" data-target="merge">' + targets.length + '线合并</button>' : '';
+    return '<div class="targets">' + merge + targets.map(function (ping) { return '<button type="button" class="chip' + (detailTargetKey === ping.key ? ' is-on' : '') + '" data-target="' + esc(ping.key) + '">' + esc(ping.label) + ' · ' + (ping.current_ms < 0 ? '—' : Math.round(ping.current_ms) + 'ms') + '</button>'; }).join('') + '</div>';
   }
 
   function detailSeries(server) {
+    if (detailTargetKey === 'merge') return null;
     var target = detailTargetKey || (server.ping && server.ping[0] ? server.ping[0].key : 'all');
     return seriesCache[seriesKey(server.uuid, range, target)] || null;
   }
 
+  function detailSeriesReady(server) {
+    var targets = server.ping || [];
+    if (detailTargetKey !== 'merge') return !!detailSeries(server);
+    return targets.length > 0 && targets.every(function (ping) { return !!seriesCache[seriesKey(server.uuid, range, ping.key)]; });
+  }
+
+  function loadDetailSeries(server, force) {
+    if (!server || !server.ping || !server.ping.length) return Promise.resolve([]);
+    if (detailTargetKey === 'merge') {
+      return Promise.all(server.ping.map(function (ping) { return loadSeries(server.uuid, ping.key, force); }));
+    }
+    return loadSeries(server.uuid, detailTargetKey || server.ping[0].key, force);
+  }
+
+  function mergedLegend(server) {
+    if (detailTargetKey !== 'merge') return '';
+    var colors = [css('--ink', '#d5d0c4'), css('--gold', '#c4a56a'), css('--live', '#8fa676'), css('--ink-dim', '#aea89a'), css('--down', '#b06d52')];
+    return '<div class="line-legend">' + (server.ping || []).map(function (ping, index) { return '<span><i style="background:' + colors[index % colors.length] + '"></i>' + esc(ping.label) + '</span>'; }).join('') + '</div>';
+  }
+
   function detailSeriesChart(server, width, height) {
+    if (detailTargetKey === 'merge') {
+      var rows = (server.ping || []).map(function (ping, index) {
+        var cache = seriesCache[seriesKey(server.uuid, range, ping.key)];
+        if (!cache || !cache.values.length) return null;
+        return {
+          label: ping.label,
+          values: cache.values,
+          tips: cache.times.map(function (time, pointIndex) { return new Date(time).toLocaleString() + ' · ' + ping.label + ' · ' + (cache.values[pointIndex] < 0 ? '无数据' : Math.round(cache.values[pointIndex]) + ' ms'); }),
+          dash: index === 1 ? '5 3' : index === 2 ? '2 3' : ''
+        };
+      }).filter(Boolean);
+      if (!rows.length) return '<div class="chart-empty">正在读取合并历史数据…</div>';
+      return Charts.multiSpark(rows, { w: width || 520, h: height || 88 });
+    }
     var cache = detailSeries(server);
     if (!cache) return '<div class="chart-empty">读取历史中…</div>';
     if (!cache.values.length) return '<div class="chart-empty">暂无历史 Ping 数据。</div>';
@@ -692,8 +768,8 @@
   }
 
   function detailPing(server) {
-    var cache = detailSeries(server);
-    return '<article class="page page-ping" data-node="' + esc(server.uuid) + '"><div class="panel-h"><h3>Latency / Packet Loss</h3>' + rangeButtons() + '</div>' + detailTargetButtons(server) + '<div class="chart-fill detail-chart">' + (cache ? detailSeriesChart(server, 960, 260) : '<div class="chart-empty">正在读取历史数据…</div>') + '</div><section class="kpi ping-kpi">' + (server.ping || []).slice(0, 5).map(function (ping) { return '<article><div class="lbl">' + esc(ping.label) + '</div><div class="val">' + (ping.current_ms < 0 ? '—' : Math.round(ping.current_ms) + 'ms') + '</div><div class="sub">loss ' + Number(ping.loss_pct || 0).toFixed(2) + '% · avg ' + (isNum(ping.avg_ms) ? Math.round(ping.avg_ms) : '—') + '</div></article>'; }).join('') + '</section></article>';
+    var ready = detailSeriesReady(server);
+    return '<article class="page page-ping" data-node="' + esc(server.uuid) + '"><div class="panel-h"><h3>Latency / Packet Loss</h3>' + rangeButtons() + '</div>' + detailTargetButtons(server) + mergedLegend(server) + '<div class="chart-fill detail-chart">' + (ready ? detailSeriesChart(server, 960, 260) : '<div class="chart-empty">正在读取历史数据…</div>') + '</div><section class="kpi ping-kpi">' + (server.ping || []).slice(0, 5).map(function (ping) { return '<article><div class="lbl">' + esc(ping.label) + '</div><div class="val">' + (ping.current_ms < 0 ? '—' : Math.round(ping.current_ms) + 'ms') + '</div><div class="sub">loss ' + Number(ping.loss_pct || 0).toFixed(2) + '% · avg ' + (isNum(ping.avg_ms) ? Math.round(ping.avg_ms) : '—') + '</div></article>'; }).join('') + '</section></article>';
   }
 
   function detailTraffic(server) {
@@ -730,9 +806,7 @@
     document.documentElement.classList.add('is-locked');
     document.body.classList.add('is-locked');
     if ((page === 'overview' || page === 'ping') && server.ping && server.ping.length) {
-      var target = detailTargetKey || server.ping[0].key;
-      var key = seriesKey(server.uuid, range, target);
-      if (!seriesCache[key] && !seriesLoading[key]) loadSeries(server.uuid, target).then(function () { var current = route(); if (current.uuid === server.uuid) renderWindow(server.uuid, current.page); });
+      if (!detailSeriesReady(server)) loadDetailSeries(server, false).then(function () { var current = route(); if (current.uuid === server.uuid) renderWindow(server.uuid, current.page); });
     }
   }
 
@@ -911,7 +985,7 @@
       range = rangeButton.dataset.range;
       var r = route();
       var server = nodeByUuid(r.uuid);
-      if (server) loadSeries(server.uuid, detailTargetKey || (server.ping[0] && server.ping[0].key), true).then(function () { renderWindow(server.uuid, r.page); });
+      if (server) loadDetailSeries(server, true).then(function () { renderWindow(server.uuid, r.page); });
       return;
     }
     var target = event.target.closest('[data-target]');
@@ -919,7 +993,7 @@
       detailTargetKey = target.dataset.target;
       var rr = route();
       var selected = nodeByUuid(rr.uuid);
-      if (selected) loadSeries(selected.uuid, detailTargetKey, true).then(function () { renderWindow(selected.uuid, rr.page); });
+      if (selected) loadDetailSeries(selected, true).then(function () { renderWindow(selected.uuid, rr.page); });
     }
   });
 

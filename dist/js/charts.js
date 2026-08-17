@@ -65,6 +65,71 @@
     return '<svg class="spark" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none"><path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.25" vector-effect="non-scaling-stroke"/>' + hits + '</svg>';
   }
 
+  function multiSpark(series, options) {
+    options = options || {};
+    var width = options.w || 480;
+    var height = options.h || 80;
+    var rows = (series || []).map(function (item, rowIndex) {
+      var values = (item.values || []).map(function (value) {
+        if (value && typeof value === 'object') {
+          var candidate = value.value != null ? value.value : value.v;
+          return finite(candidate);
+        }
+        return finite(value);
+      });
+      return {
+        label: item.label || ('Series ' + (rowIndex + 1)),
+        values: values,
+        color: item.color || null,
+        dash: item.dash || '',
+        tips: item.tips || []
+      };
+    }).filter(function (item) { return item.values.length; });
+    if (!rows.length) return '<div class="chart-empty">暂无历史数据</div>';
+    var good = [];
+    rows.forEach(function (row) {
+      row.values.forEach(function (value) { if (value != null && value >= 0) good.push(value); });
+    });
+    if (!good.length) return '<div class="chart-empty">暂无历史数据</div>';
+    var dataMax = Math.max.apply(null, good);
+    var max = dataMax <= 50 ? 50 : dataMax <= 100 ? 100 : dataMax <= 200 ? 200 : dataMax <= 500 ? 500 : Math.ceil(dataMax / 100) * 100;
+    var padX = 3;
+    var padY = 6;
+    var defaults = [css('--ink', '#d5d0c4'), css('--gold', '#c4a56a'), css('--live', '#8fa676'), rgba(css('--ink', '#d5d0c4'), 0.55), css('--down', '#b06d52')];
+    var paths = '';
+    rows.forEach(function (row, rowIndex) {
+      var step = row.values.length === 1 ? 0 : (width - padX * 2) / (row.values.length - 1);
+      var d = '';
+      var started = false;
+      row.values.forEach(function (value, index) {
+        if (value == null || value < 0) { started = false; return; }
+        var x = padX + index * step;
+        var y = height - padY - value / Math.max(1, max) * (height - padY * 2);
+        d += (started ? ' L ' : ' M ') + x.toFixed(2) + ' ' + y.toFixed(2);
+        started = true;
+      });
+      if (d) paths += '<path d="' + d.trim() + '" fill="none" stroke="' + (row.color || defaults[rowIndex % defaults.length]) + '" stroke-width="1.25"' + (row.dash ? ' stroke-dasharray="' + escapeAttr(row.dash) + '"' : '') + ' vector-effect="non-scaling-stroke"/>';
+    });
+    var maxLen = Math.max.apply(null, rows.map(function (row) { return row.values.length; }));
+    var hits = '';
+    if (maxLen > 0) {
+      var hitStep = maxLen === 1 ? width : (width - padX * 2) / (maxLen - 1);
+      var hitWidth = Math.max(8, hitStep || width);
+      for (var hitIndex = 0; hitIndex < maxLen; hitIndex += 1) {
+        var tips = [];
+        rows.forEach(function (row) {
+          var scaledIndex = row.values.length <= 1 || maxLen <= 1 ? 0 : Math.round(hitIndex * (row.values.length - 1) / (maxLen - 1));
+          var value = row.values[scaledIndex];
+          if (value == null) return;
+          tips.push(row.label + ' ' + (value < 0 ? '无数据' : Math.round(value) + ' ms'));
+        });
+        var x = padX + hitIndex * hitStep;
+        hits += '<rect class="chart-hit" data-tip="' + escapeAttr(tips.join(' · ')) + '" x="' + (x - hitWidth / 2).toFixed(2) + '" y="0" width="' + hitWidth.toFixed(2) + '" height="' + height + '" fill="transparent"/>';
+      }
+    }
+    return '<svg class="spark multi-spark" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none">' + paths + hits + '</svg>';
+  }
+
   function bars(items, options) {
     options = options || {};
     var width = options.w || 480;
@@ -162,5 +227,5 @@
     return '<svg class="ruler-svg" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true">' + ticks + labels + extra + marker + '</svg>';
   }
 
-  global.LineGridCharts = { spark: spark, bars: bars, stacked: stacked, wave: wave, ruler: ruler };
+  global.LineGridCharts = { spark: spark, multiSpark: multiSpark, bars: bars, stacked: stacked, wave: wave, ruler: ruler };
 })(window);

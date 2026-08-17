@@ -9,13 +9,13 @@ let metricCalls = 0;
 function rpcResult(method) {
   if (method === 'common:getNodes') return {
     'u-1': {
-      uuid: 'u-1', name: 'SG-01', cpu_name: 'EPYC', arch: 'x86_64', cpu_cores: 2,
+      uuid: 'u-1', name: 'SG-01', weight: 10, cpu_name: 'EPYC', arch: 'x86_64', cpu_cores: 2,
       os: 'Debian', kernel_version: '6.1', region: 'SG', mem_total: 8e9, disk_total: 80e9,
       price: 5, billing_cycle: 30, currency: 'USD', traffic_limit: 1e12,
       traffic_limit_type: 'sum', expired_at: '2027-01-01'
     },
     'u-2': {
-      uuid: 'u-2', name: 'Offline', cpu_name: 'Xeon', arch: 'x86_64', cpu_cores: 1,
+      uuid: 'u-2', name: 'Offline', weight: 20, cpu_name: 'Xeon', arch: 'x86_64', cpu_cores: 1,
       os: 'Debian', region: 'HK', mem_total: 1e9, disk_total: 10e9,
       price: -1, billing_cycle: 30, currency: 'USD', traffic_limit: 0,
       expired_at: '2226-08-11'
@@ -24,7 +24,7 @@ function rpcResult(method) {
   if (method === 'common:getNodesLatestStatus') return {
     'u-1': {
       online: true, cpu: 12, ram: 2e9, ram_total: 8e9, disk: 20e9, disk_total: 80e9,
-      net_in: 12345, net_out: 6789, uptime: 86400,
+      net_in: 12345, net_out: 6789, net_total_up: 1000, net_total_down: 3000, uptime: 86400,
       ping: { '1': { name: 'Shanghai', latest: 35, avg: 38, loss: 0.5, min: 30, max: 45, tail: 0.1 } }
     }
   };
@@ -64,6 +64,7 @@ vm.runInContext(code, context);
 context.window.KomariLineGridAPI.snapshot().then(snapshot => {
   assert.equal(snapshot.title, 'Test Komari');
   assert.equal(snapshot.servers.length, 2);
+  assert.deepEqual(snapshot.servers.map(node => node.uuid), ['u-1', 'u-2'], 'lower Komari weight must render first');
   assert.equal(metricCalls, 0, 'initial snapshot must not wait for metric history');
 
   const online = snapshot.servers.find(node => node.uuid === 'u-1');
@@ -72,8 +73,11 @@ context.window.KomariLineGridAPI.snapshot().then(snapshot => {
   assert.equal(online.provider_name, 'Demo');
   assert.equal(online.longitude, 103.82);
   assert.equal(online.ping[0].current_ms, 35);
-  assert.equal(online.traffic_available, false);
-  assert.equal(online.traffic_used, null);
+  assert.equal(online.traffic_available, true);
+  assert.equal(online.traffic_source, 'live_total');
+  assert.equal(online.traffic_used_up, 1000);
+  assert.equal(online.traffic_used_down, 3000);
+  assert.equal(online.traffic_used, 4000);
 
   const offline = snapshot.servers.find(node => node.uuid === 'u-2');
   assert.equal(offline.online, false);
@@ -93,6 +97,7 @@ context.window.KomariLineGridAPI.snapshot().then(snapshot => {
 }).then(snapshot => {
   assert.equal(metricCalls, 1, 'traffic history should load only after first snapshot');
   const online = snapshot.servers.find(node => node.uuid === 'u-1');
+  assert.equal(online.traffic_source, 'metric');
   assert.equal(online.traffic_used, 400);
   assert.equal(online.traffic_used_up, 100);
   assert.equal(online.traffic_used_down, 300);
