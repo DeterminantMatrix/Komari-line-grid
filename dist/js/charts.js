@@ -24,13 +24,13 @@
   }
 
   function inkRgba(a) {
-    const p = parseColor(token("--ink", "#d5d0c4"));
-    if (!p) return "rgba(213,208,196," + a + ")";
+    const p = parseColor(token("--ink", "#ddd6c8"));
+    if (!p) return "rgba(221,214,200," + a + ")";
     return "rgba(" + p[0] + "," + p[1] + "," + p[2] + "," + a + ")";
   }
 
   function gold() { return token("--gold", "#c4a56a"); }
-  function voidFill() { return token("--void", "#0c0c0c"); }
+  function voidFill() { return token("--void", "#15130f"); }
 
   function esc(s) {
     return String(s == null ? "" : s)
@@ -105,7 +105,7 @@
     });
     if (!first) first = coords[0];
     if (!last) last = coords[coords.length - 1];
-    const color = opt.color || token("--ink", "#d5d0c4");
+    const color = opt.color || token("--ink", "#ddd6c8");
     const hitW = Math.max(6, step || plotW);
     const hits = coords.map(function (p, i) {
       const tip = (opt.tips && opt.tips[i]) || (pts[i] < 0 ? "无数据" : pts[i] + " ms");
@@ -253,7 +253,7 @@
     const mark =
       '<line x1="' + cx.toFixed(1) + '" y1="2" x2="' + cx.toFixed(1) + '" y2="26" stroke="' + gold() + '" stroke-width="1.2"/>' +
       '<circle cx="' + cx.toFixed(1) + '" cy="30" r="7" fill="' + voidFill() + '" stroke="' + gold() + '"/>' +
-      '<text x="' + cx.toFixed(1) + '" y="33.5" text-anchor="middle" fill="' + token("--ink", "#d5d0c4") + '" font-size="8" font-family="IBM Plex Mono, monospace">' + selected + "</text>";
+      '<text x="' + cx.toFixed(1) + '" y="33.5" text-anchor="middle" fill="' + token("--ink", "#ddd6c8") + '" font-size="8" font-family="IBM Plex Mono, monospace">' + selected + "</text>";
     let extra = "";
     if (half && half !== selected) {
       const hx = ((half - 1) / Math.max(1, daysInMonth - 1)) * (w - 8) + 4;

@@ -23,21 +23,22 @@
   <style>
 :root {
   --globe-rim: rgba(8, 8, 8, 0.36);
+  --globe-tint: 0.15;
   --sans: "Instrument Sans", "Source Han Sans SC", "Noto Sans SC", sans-serif;
   --serif: "Instrument Serif", "Songti SC", "Noto Serif SC", serif;
   --mono: "IBM Plex Mono", "Source Han Mono SC", ui-monospace, monospace;
   --pad: clamp(20px, 3.4vw, 48px);
   --max: 1360px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --void: #0c0c0c;
-  --void-2: #0c0c0c;
-  --ink: #d5d0c4;
-  --ink-soft: #c4beaf;
-  --ink-dim: #aea89a;
-  --ink-faint: #4a463c;
-  --line: rgba(213, 208, 196, 0.08);
-  --line-strong: rgba(213, 208, 196, 0.16);
-  --cell-line: #1f1e1b;
+  --void: #15130f;
+  --void-2: #15130f;
+  --ink: #ddd6c8;
+  --ink-soft: #ccc5b4;
+  --ink-dim: #b6ae9c;
+  --ink-faint: #524d42;
+  --line: rgba(221, 214, 200, 0.09);
+  --line-strong: rgba(221, 214, 200, 0.17);
+  --cell-line: #26231c;
   --gold: #c4a56a;
   --gold-dim: rgba(196, 165, 106, 0.16);
   --live: #8fa676;
@@ -48,9 +49,9 @@
 
 html[data-theme="light"] {
   --globe-rim: rgba(42, 33, 20, 0.2);
-  --void: #e4d3ae;
-  --void-2: #e4d3ae;
-  --ink: #2a2114;
+  --void: #d4c096;
+  --void-2: #d4c096;
+  --ink: #261d11;
   --ink-soft: #4a3c26;
   --ink-dim: #6d5b3a;
   --ink-faint: #b79d6e;
@@ -85,15 +86,15 @@ body {
   position: relative;
 }
 
-@property --void { syntax: "<color>"; inherits: true; initial-value: #0c0c0c; }
-@property --void-2 { syntax: "<color>"; inherits: true; initial-value: #0c0c0c; }
-@property --ink { syntax: "<color>"; inherits: true; initial-value: #d5d0c4; }
-@property --ink-soft { syntax: "<color>"; inherits: true; initial-value: #c4beaf; }
-@property --ink-dim { syntax: "<color>"; inherits: true; initial-value: #aea89a; }
-@property --ink-faint { syntax: "<color>"; inherits: true; initial-value: #4a463c; }
-@property --line { syntax: "<color>"; inherits: true; initial-value: rgba(213, 208, 196, 0.08); }
-@property --line-strong { syntax: "<color>"; inherits: true; initial-value: rgba(213, 208, 196, 0.16); }
-@property --cell-line { syntax: "<color>"; inherits: true; initial-value: #1f1e1b; }
+@property --void { syntax: "<color>"; inherits: true; initial-value: #15130f; }
+@property --void-2 { syntax: "<color>"; inherits: true; initial-value: #15130f; }
+@property --ink { syntax: "<color>"; inherits: true; initial-value: #ddd6c8; }
+@property --ink-soft { syntax: "<color>"; inherits: true; initial-value: #ccc5b4; }
+@property --ink-dim { syntax: "<color>"; inherits: true; initial-value: #b6ae9c; }
+@property --ink-faint { syntax: "<color>"; inherits: true; initial-value: #524d42; }
+@property --line { syntax: "<color>"; inherits: true; initial-value: rgba(221, 214, 200, 0.09); }
+@property --line-strong { syntax: "<color>"; inherits: true; initial-value: rgba(221, 214, 200, 0.17); }
+@property --cell-line { syntax: "<color>"; inherits: true; initial-value: #26231c; }
 @property --gold { syntax: "<color>"; inherits: true; initial-value: #c4a56a; }
 @property --gold-dim { syntax: "<color>"; inherits: true; initial-value: rgba(196, 165, 106, 0.16); }
 @property --live { syntax: "<color>"; inherits: true; initial-value: #8fa676; }
@@ -123,14 +124,14 @@ html[data-fx-expose="1"] {
 }
 
 .atlas .globe-disk { stroke: var(--ink); stroke-opacity: 0.42; }
-.atlas .globe-wire { stroke: var(--ink); stroke-opacity: 0.16; }
+.atlas .globe-wire { stroke: var(--ink); stroke-opacity: 0.1; }
 .atlas .globe-sweep { stroke: var(--ink); }
 .atlas .globe-base { stroke: var(--ink); stroke-opacity: 0.4; }
 .atlas .globe-link { stroke: var(--ink); opacity: 0.32; }
 .atlas .globe-caption { fill: var(--ink); opacity: 0.32; }
 
 html[data-theme="light"] .atlas .globe-disk { stroke-opacity: 0.58; }
-html[data-theme="light"] .atlas .globe-wire { stroke-opacity: 0.4; }
+html[data-theme="light"] .atlas .globe-wire { stroke-opacity: 0.14; }
 html[data-theme="light"] .atlas .globe-base { stroke-opacity: 0.5; }
 html[data-theme="light"] .atlas .globe-link { opacity: 0.42; }
 html[data-theme="light"] .atlas .globe-caption { opacity: 0.42; }
@@ -142,14 +143,16 @@ html[data-theme="light"] .atlas .globe-caption { opacity: 0.42; }
   z-index: 24;
   opacity: 0;
   background: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2764%27 height=%2764%27 viewBox=%270 0 64 64%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%27.82%27 numOctaves=%273%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27 opacity=%27.52%27/%3E%3C/svg%3E") repeat;
-  background-size: 160px 160px;
-  mix-blend-mode: overlay;
+  background-size: 140px 140px;
+  mix-blend-mode: screen;
+  filter: brightness(0.42) contrast(2.6);
 }
 
-html[data-fx-grain="1"] .fx-grain { opacity: 0.15; }
+html[data-fx-grain="1"] .fx-grain { opacity: 0.22; }
 
 html[data-theme="light"] .fx-grain {
   mix-blend-mode: multiply;
+  filter: none;
 }
 
 html[data-theme="light"][data-fx-grain="1"] .fx-grain { opacity: 0.09; }
@@ -2253,7 +2256,7 @@ html[data-theme="light"] .globe-land { stroke-opacity: .52; }
   background: rgba(0,0,0,0.62);
   backdrop-filter: blur(4px);
 }
-html[data-theme="light"] .finance-overlay { background: rgba(228,211,174,0.45); }
+html[data-theme="light"] .finance-overlay { background: rgba(212,192,150,0.45); }
 .finance-overlay[hidden] { display: none !important; }
 .finance-stage {
   width: min(1080px, 94vw);
@@ -4492,13 +4495,13 @@ window.ProbeConfig = {
   }
 
   function inkRgba(a) {
-    const p = parseColor(token("--ink", "#d5d0c4"));
-    if (!p) return "rgba(213,208,196," + a + ")";
+    const p = parseColor(token("--ink", "#ddd6c8"));
+    if (!p) return "rgba(221,214,200," + a + ")";
     return "rgba(" + p[0] + "," + p[1] + "," + p[2] + "," + a + ")";
   }
 
   function gold() { return token("--gold", "#c4a56a"); }
-  function voidFill() { return token("--void", "#0c0c0c"); }
+  function voidFill() { return token("--void", "#15130f"); }
 
   function esc(s) {
     return String(s == null ? "" : s)
@@ -4573,7 +4576,7 @@ window.ProbeConfig = {
     });
     if (!first) first = coords[0];
     if (!last) last = coords[coords.length - 1];
-    const color = opt.color || token("--ink", "#d5d0c4");
+    const color = opt.color || token("--ink", "#ddd6c8");
     const hitW = Math.max(6, step || plotW);
     const hits = coords.map(function (p, i) {
       const tip = (opt.tips && opt.tips[i]) || (pts[i] < 0 ? "无数据" : pts[i] + " ms");
@@ -4721,7 +4724,7 @@ window.ProbeConfig = {
     const mark =
       '<line x1="' + cx.toFixed(1) + '" y1="2" x2="' + cx.toFixed(1) + '" y2="26" stroke="' + gold() + '" stroke-width="1.2"/>' +
       '<circle cx="' + cx.toFixed(1) + '" cy="30" r="7" fill="' + voidFill() + '" stroke="' + gold() + '"/>' +
-      '<text x="' + cx.toFixed(1) + '" y="33.5" text-anchor="middle" fill="' + token("--ink", "#d5d0c4") + '" font-size="8" font-family="IBM Plex Mono, monospace">' + selected + "</text>";
+      '<text x="' + cx.toFixed(1) + '" y="33.5" text-anchor="middle" fill="' + token("--ink", "#ddd6c8") + '" font-size="8" font-family="IBM Plex Mono, monospace">' + selected + "</text>";
     let extra = "";
     if (half && half !== selected) {
       const hx = ((half - 1) / Math.max(1, daysInMonth - 1)) * (w - 8) + 4;
@@ -4844,7 +4847,6 @@ window.ProbeConfig = {
 
   global.ProbeCharts = { spark: spark, multiSpark: multiSpark, bars: bars, stacked: stacked, wave: wave, ruler: ruler };
 })(window);
-
 </script>
   <script>
 (function () {
@@ -4924,7 +4926,7 @@ window.ProbeConfig = {
 
   function hexToRgba(color, a) {
     const p = parseColor(color);
-    if (!p) return "rgba(213,208,196," + a + ")";
+    if (!p) return "rgba(221,214,200," + a + ")";
     return "rgba(" + p[0] + "," + p[1] + "," + p[2] + "," + a + ")";
   }
 
@@ -4994,16 +4996,7 @@ window.ProbeConfig = {
     [/\b(TXG|TAICHUNG)\b|台中|臺中/i, [120.6736, 24.1477], "Taichung"],
     [/\b(BUF|BUFFALO)\b/i, [-78.8784, 42.8864], "Buffalo"],
     [/\b(HACIENDA[ _.-]*HEIGHTS)\b/i, [-117.9687, 33.9931], "Hacienda Heights"],
-    [/\b(NYC|NEW[ _.-]*YORK)\b/i, [-74.0060, 40.7128], "New York"],
-    // Stable provider/name fallbacks for nodes whose public Komari payload has no usable IP.
-    // Exact metadata or sanitized GeoIP cache still wins because explicit city hints above match first.
-    [/CHICAGOVPS[^A-Z0-9]*NY/i, [-78.8784, 42.8864], "Buffalo"],
-    [/SHILII[^A-Z0-9]*FRONTIER/i, [-117.9687, 33.9931], "Hacienda Heights"],
-    [/(LEGENDVPS[^A-Z0-9]*US|BESTVM[^A-Z0-9]*US[^A-Z0-9]*PRO|YUUSEI[^A-Z0-9]*4837|RABISU)/i, [-118.2437, 34.0522], "Los Angeles"],
-    [/HOSTINGFUCHS/i, [5.47, 51.57], "Meierijstad"],
-    [/SHILII[^A-Z0-9]*AKILE/i, [-0.1276, 51.5072], "London"],
-    [/(LEGENDVPS[^A-Z0-9]*KR|^阿里$)/i, [126.9780, 37.5665], "Seoul"],
-    [/NOBRAND[^A-Z0-9]*4[._ -]?9/i, [139.6917, 35.6895], "Tokyo"],
+    [/\b(NYC|NEW[ _.-]*YORK)\b|CHICAGO[^A-Z0-9]*VPS[^A-Z0-9]*NY/i, [-74.0060, 40.7128], "New York"],
   ];
 
   function cityHintInfo(server) {
@@ -5031,10 +5024,8 @@ window.ProbeConfig = {
     if (cc === 'HK') return 'Hong Kong';
     if (cc === 'TW') return /TAICHUNG|台中|臺中/i.test(raw) ? 'Taichung' : /TAIPEI|台北|臺北/i.test(raw) ? 'Taipei' : 'Taiwan';
     if (cc === 'SG') return 'Singapore';
-    if (cc === 'JP' && !raw) return 'Tokyo';
-    if (cc === 'KR' && !raw) return 'Seoul';
-    if (cc === 'GB' && !raw) return 'London';
-    if (cc === 'NL' && !raw) return 'Amsterdam';
+    if (cc === 'JP' && !raw) return 'Japan';
+    if (cc === 'KR' && !raw) return 'Korea';
     const countryWords = {
       US: /^(US|USA|美国|美國|United States|United States of America)$/i,
       GB: /^(GB|UK|英国|英國|United Kingdom|Britain)$/i,

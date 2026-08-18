@@ -1,20 +1,21 @@
 :root {
   --globe-rim: rgba(8, 8, 8, 0.36);
+  --globe-tint: 0.15;
   --sans: "Instrument Sans", "Source Han Sans SC", "Noto Sans SC", sans-serif;
   --serif: "Instrument Serif", "Songti SC", "Noto Serif SC", serif;
   --mono: "IBM Plex Mono", "Source Han Mono SC", ui-monospace, monospace;
   --pad: clamp(20px, 3.4vw, 48px);
   --max: 1360px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --void: #0c0c0c;
-  --void-2: #0c0c0c;
-  --ink: #d5d0c4;
-  --ink-soft: #c4beaf;
-  --ink-dim: #aea89a;
-  --ink-faint: #4a463c;
-  --line: rgba(213, 208, 196, 0.08);
-  --line-strong: rgba(213, 208, 196, 0.16);
-  --cell-line: #1f1e1b;
+  --void: #15130f;
+  --void-2: #15130f;
+  --ink: #ddd6c8;
+  --ink-soft: #ccc5b4;
+  --ink-dim: #b6ae9c;
+  --ink-faint: #524d42;
+  --line: rgba(221, 214, 200, 0.09);
+  --line-strong: rgba(221, 214, 200, 0.17);
+  --cell-line: #26231c;
   --gold: #c4a56a;
   --gold-dim: rgba(196, 165, 106, 0.16);
   --live: #8fa676;
@@ -25,9 +26,9 @@
 
 html[data-theme="light"] {
   --globe-rim: rgba(42, 33, 20, 0.2);
-  --void: #e4d3ae;
-  --void-2: #e4d3ae;
-  --ink: #2a2114;
+  --void: #d4c096;
+  --void-2: #d4c096;
+  --ink: #261d11;
   --ink-soft: #4a3c26;
   --ink-dim: #6d5b3a;
   --ink-faint: #b79d6e;
@@ -62,15 +63,15 @@ body {
   position: relative;
 }
 
-@property --void { syntax: "<color>"; inherits: true; initial-value: #0c0c0c; }
-@property --void-2 { syntax: "<color>"; inherits: true; initial-value: #0c0c0c; }
-@property --ink { syntax: "<color>"; inherits: true; initial-value: #d5d0c4; }
-@property --ink-soft { syntax: "<color>"; inherits: true; initial-value: #c4beaf; }
-@property --ink-dim { syntax: "<color>"; inherits: true; initial-value: #aea89a; }
-@property --ink-faint { syntax: "<color>"; inherits: true; initial-value: #4a463c; }
-@property --line { syntax: "<color>"; inherits: true; initial-value: rgba(213, 208, 196, 0.08); }
-@property --line-strong { syntax: "<color>"; inherits: true; initial-value: rgba(213, 208, 196, 0.16); }
-@property --cell-line { syntax: "<color>"; inherits: true; initial-value: #1f1e1b; }
+@property --void { syntax: "<color>"; inherits: true; initial-value: #15130f; }
+@property --void-2 { syntax: "<color>"; inherits: true; initial-value: #15130f; }
+@property --ink { syntax: "<color>"; inherits: true; initial-value: #ddd6c8; }
+@property --ink-soft { syntax: "<color>"; inherits: true; initial-value: #ccc5b4; }
+@property --ink-dim { syntax: "<color>"; inherits: true; initial-value: #b6ae9c; }
+@property --ink-faint { syntax: "<color>"; inherits: true; initial-value: #524d42; }
+@property --line { syntax: "<color>"; inherits: true; initial-value: rgba(221, 214, 200, 0.09); }
+@property --line-strong { syntax: "<color>"; inherits: true; initial-value: rgba(221, 214, 200, 0.17); }
+@property --cell-line { syntax: "<color>"; inherits: true; initial-value: #26231c; }
 @property --gold { syntax: "<color>"; inherits: true; initial-value: #c4a56a; }
 @property --gold-dim { syntax: "<color>"; inherits: true; initial-value: rgba(196, 165, 106, 0.16); }
 @property --live { syntax: "<color>"; inherits: true; initial-value: #8fa676; }
@@ -100,14 +101,14 @@ html[data-fx-expose="1"] {
 }
 
 .atlas .globe-disk { stroke: var(--ink); stroke-opacity: 0.42; }
-.atlas .globe-wire { stroke: var(--ink); stroke-opacity: 0.16; }
+.atlas .globe-wire { stroke: var(--ink); stroke-opacity: 0.1; }
 .atlas .globe-sweep { stroke: var(--ink); }
 .atlas .globe-base { stroke: var(--ink); stroke-opacity: 0.4; }
 .atlas .globe-link { stroke: var(--ink); opacity: 0.32; }
 .atlas .globe-caption { fill: var(--ink); opacity: 0.32; }
 
 html[data-theme="light"] .atlas .globe-disk { stroke-opacity: 0.58; }
-html[data-theme="light"] .atlas .globe-wire { stroke-opacity: 0.4; }
+html[data-theme="light"] .atlas .globe-wire { stroke-opacity: 0.14; }
 html[data-theme="light"] .atlas .globe-base { stroke-opacity: 0.5; }
 html[data-theme="light"] .atlas .globe-link { opacity: 0.42; }
 html[data-theme="light"] .atlas .globe-caption { opacity: 0.42; }
@@ -119,14 +120,16 @@ html[data-theme="light"] .atlas .globe-caption { opacity: 0.42; }
   z-index: 24;
   opacity: 0;
   background: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2764%27 height=%2764%27 viewBox=%270 0 64 64%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%27.82%27 numOctaves=%273%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27 opacity=%27.52%27/%3E%3C/svg%3E") repeat;
-  background-size: 160px 160px;
-  mix-blend-mode: overlay;
+  background-size: 140px 140px;
+  mix-blend-mode: screen;
+  filter: brightness(0.42) contrast(2.6);
 }
 
-html[data-fx-grain="1"] .fx-grain { opacity: 0.15; }
+html[data-fx-grain="1"] .fx-grain { opacity: 0.22; }
 
 html[data-theme="light"] .fx-grain {
   mix-blend-mode: multiply;
+  filter: none;
 }
 
 html[data-theme="light"][data-fx-grain="1"] .fx-grain { opacity: 0.09; }
@@ -2230,7 +2233,7 @@ html[data-theme="light"] .globe-land { stroke-opacity: .52; }
   background: rgba(0,0,0,0.62);
   backdrop-filter: blur(4px);
 }
-html[data-theme="light"] .finance-overlay { background: rgba(228,211,174,0.45); }
+html[data-theme="light"] .finance-overlay { background: rgba(212,192,150,0.45); }
 .finance-overlay[hidden] { display: none !important; }
 .finance-stage {
   width: min(1080px, 94vw);

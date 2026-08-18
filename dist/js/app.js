@@ -75,7 +75,7 @@
 
   function hexToRgba(color, a) {
     const p = parseColor(color);
-    if (!p) return "rgba(213,208,196," + a + ")";
+    if (!p) return "rgba(221,214,200," + a + ")";
     return "rgba(" + p[0] + "," + p[1] + "," + p[2] + "," + a + ")";
   }
 
