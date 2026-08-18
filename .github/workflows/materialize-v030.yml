@@ -1,0 +1,66 @@
+name: Materialize v0.3.0
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  materialize:
+    if: ${{ github.event.issue.title == 'materialize-v0.3.0' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Restore and verify source bundle
+        shell: bash
+        run: |
+          cat scripts/source-bundle.b64.part-* | base64 -d > /tmp/source-bundle.tar.gz
+          expected="$(cat scripts/source-bundle.sha256)"
+          actual="$(sha256sum /tmp/source-bundle.tar.gz | awk '{print $1}')"
+          test "$actual" = "$expected"
+          tar -xzf /tmp/source-bundle.tar.gz
+      - name: Validate v0.3.0
+        run: ./scripts/test.sh
+      - name: Package v0.3.0
+        run: ./scripts/package.sh
+      - name: Materialize normal source tree
+        shell: bash
+        run: |
+          rm -f scripts/source-bundle.b64.part-* scripts/source-bundle.sha256
+          rm -f .github/workflows/materialize-v030.yml
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Materialize Komari Line Grid v0.3.0 source'
+          git push origin HEAD:main
+      - name: Publish v0.3.0 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag='v0.3.0'
+          target="$(git rev-parse HEAD)"
+          for attempt in 1 2 3 4 5; do
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" komari-line-grid.zip --clobber && exit 0
+            else
+              gh release create "$tag" komari-line-grid.zip --target "$target" --title "$tag" --notes 'Komari Line Grid v0.3.0. Rebased on the preferred Line Grid UI with current Komari RPC2 data semantics.' && exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          exit 1
+      - name: Close trigger issue
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh issue close ${{ github.event.issue.number }} --comment 'v0.3.0 materialization workflow finished.' || true
