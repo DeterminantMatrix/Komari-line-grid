@@ -150,7 +150,7 @@
     }).join('');
     const packed = coords.map(function (p, i) { return p[0].toFixed(2) + "," + p[1].toFixed(2) + "," + pts[i]; }).join(";");
     return (
-      '<svg class="spark' + (showY || showX ? ' has-axes' : '') + '" viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="none" data-pts="' + packed + '">' +
+      '<svg class="spark' + (showY || showX ? ' has-axes' : '') + '" viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="none" data-plot-l="' + padL + '" data-plot-r="' + (w - padR) + '" data-pts="' + packed + '">' +
         grid + area +
         '<path class="spark-line" d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.25" vector-effect="non-scaling-stroke"/>' +
         '<circle cx="' + last[0].toFixed(2) + '" cy="' + last[1].toFixed(2) + '" r="1.7" fill="' + color + '"/>' +
@@ -371,7 +371,7 @@
     const legend = '<div class="multi-legend">' + series.map(function (s, i) {
       return '<span><i style="border-top-color:' + colors[i % colors.length] + ';' + (dashes[i % dashes.length] ? 'border-top-style:dashed;' : '') + '"></i>' + esc(s.label || s.key || '') + '</span>';
     }).join('') + '</div>';
-    return '<div class="multi-chart"><svg class="multi-spark' + (showY || showX ? ' has-axes' : '') + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' + grid + paths + axes + hits + '</svg>' + legend + '</div>';
+    return '<div class="multi-chart"><svg class="multi-spark' + (showY || showX ? ' has-axes' : '') + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" data-plot-l="' + padL + '" data-plot-r="' + (w - padR) + '">' + grid + paths + axes + '<g class="scope-cur" hidden><line class="scope-v" x1="0" y1="' + padT + '" x2="0" y2="' + plotBottom.toFixed(2) + '" stroke="' + inkRgba(0.62) + '" stroke-width="0.8" opacity="0.72"/></g>' + hits + '</svg>' + legend + '</div>';
   }
 
   global.ProbeCharts = { spark: spark, multiSpark: multiSpark, bars: bars, stacked: stacked, wave: wave, ruler: ruler };

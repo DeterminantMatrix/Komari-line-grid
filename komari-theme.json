@@ -2,7 +2,7 @@
   "name": "Line Grid",
   "short": "line-grid",
   "description": "Faithful Line Grid for Komari RPC2 with desktop/mobile responsive layouts, privacy-aware finance, city caching, sortable node lists and admin return-route persistence.",
-  "version": "0.3.14",
+  "version": "0.3.15",
   "author": "line-grid theme contributors / DeterminantMatrix",
   "url": "https://github.com/DeterminantMatrix/Komari-line-grid",
   "preview": "preview.svg",

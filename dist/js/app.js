@@ -1637,6 +1637,58 @@
     return items;
   }
 
+  function clipToLimb(visLL, hidLL, ortho) {
+    let lon0 = visLL[0];
+    let lat0 = visLL[1];
+    let lon1 = hidLL[0];
+    let lat1 = hidLL[1];
+    if (lon1 - lon0 > 180) lon1 -= 360;
+    if (lon0 - lon1 > 180) lon0 -= 360;
+    let lo = 0;
+    let hi = 1;
+    let best = ortho(lon0, lat0);
+    for (let k = 0; k < 7; k += 1) {
+      const t = (lo + hi) / 2;
+      const p = ortho(lon0 + (lon1 - lon0) * t, lat0 + (lat1 - lat0) * t);
+      if (p) { lo = t; best = p; } else hi = t;
+    }
+    return best;
+  }
+
+  function landPathData(ortho) {
+    const rings = WORLD_OUTLINES || [];
+    let fill = "";
+    let stroke = "";
+    for (let r = 0; r < rings.length; r += 1) {
+      const ring = rings[r];
+      const n = ring.length;
+      if (n < 3) continue;
+      const vis = new Array(n);
+      for (let i = 0; i < n; i += 1) vis[i] = ortho(ring[i][0], ring[i][1]);
+      let d = "";
+      let drawing = false;
+      for (let i = 0; i < n; i += 1) {
+        const a = vis[i];
+        const b = vis[(i + 1) % n];
+        if (a && b) {
+          if (!drawing) { d += "M " + a.x.toFixed(1) + " " + a.y.toFixed(1); drawing = true; }
+          d += " L " + b.x.toFixed(1) + " " + b.y.toFixed(1);
+        } else if (a && !b) {
+          const c = clipToLimb(ring[i], ring[(i + 1) % n], ortho);
+          if (!drawing) { d += "M " + a.x.toFixed(1) + " " + a.y.toFixed(1); drawing = true; }
+          if (c) d += " L " + c.x.toFixed(1) + " " + c.y.toFixed(1);
+          drawing = false;
+        } else if (!a && b) {
+          const c = clipToLimb(ring[(i + 1) % n], ring[i], ortho);
+          if (c) { d += "M " + c.x.toFixed(1) + " " + c.y.toFixed(1); drawing = true; }
+          d += " L " + b.x.toFixed(1) + " " + b.y.toFixed(1);
+        }
+      }
+      if (d) { fill += d + " Z "; stroke += d + " "; }
+    }
+    return { fill: fill, stroke: stroke };
+  }
+
   function globeMarkup() {
     const cx = 168;
     const cy = 112;
@@ -1665,26 +1717,19 @@
       }
       return d ? '<path class="globe-wire" d="' + d + '" fill="none" stroke-width="0.9"/>' : "";
     }
-    function landOutlines() {
-      return WORLD_OUTLINES.map(function (shape) {
-        let d = "";
-        let started = false;
-        shape.forEach(function (ll) {
-          const p = ortho(ll[0], ll[1]);
-          if (!p) { started = false; return; }
-          d += (started ? " L " : "M ") + p.x.toFixed(2) + " " + p.y.toFixed(2);
-          started = true;
-        });
-        return d ? '<path class="globe-land" d="' + d + '" fill="none" stroke-width="1.15"/>' : "";
-      }).join("");
-    }
     let wire =
       '<defs><radialGradient id="globe-shade" cx="38%" cy="36%" r="68%">' +
         '<stop offset="0%" stop-color="var(--ink)" stop-opacity="0.06"/>' +
         '<stop offset="70%" stop-color="var(--ink)" stop-opacity="0"/>' +
         '<stop offset="100%" stop-color="var(--globe-rim)" stop-opacity="1"/>' +
       "</radialGradient></defs>" +
-      '<circle class="globe-disk" cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="url(#globe-shade)" stroke="var(--ink)" stroke-width="1.05"/>' + landOutlines();
+      '<circle class="globe-ocean" cx="' + cx + '" cy="' + cy + '" r="' + R + '" />' +
+      '<circle class="globe-disk" cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="url(#globe-shade)" stroke="var(--ink)" stroke-width="1.05"/>';
+    const land = landPathData(ortho);
+    if (land.fill) {
+      wire += '<path class="globe-land" d="' + land.fill + '" />';
+      wire += '<path class="globe-coast" d="' + land.stroke + '" fill="none" />';
+    }
     for (let lon = -180; lon < 180; lon += 30) wire += curve(lon, null, -80, 80, 4);
     for (let lat = -60; lat <= 60; lat += 30) wire += curve(null, lat, -180, 180, 4);
     wire += curve(null, 0, -180, 180, 3).replace('stroke-width="0.9"', 'stroke-width="1.15"');
@@ -1720,7 +1765,7 @@
       return (
         '<g class="globe-node">' +
           '<path d="M ' + n.px.toFixed(1) + " " + n.py.toFixed(1) + " L " + n.lx.toFixed(1) + " " + n.ly.toFixed(1) + '" fill="none" stroke="var(--ink)" stroke-width="0.75"/>' +
-          '<circle cx="' + n.px.toFixed(1) + '" cy="' + n.py.toFixed(1) + '" r="2.1" fill="none" stroke="' + (n.s.online ? "var(--ink)" : "var(--down)") + '" stroke-width="1"/>' +
+          '<circle cx="' + n.px.toFixed(1) + '" cy="' + n.py.toFixed(1) + '" r="2.1" fill="none" stroke="' + pingColor(n.s) + '" stroke-width="1.15"/>' +
           '<text x="' + tx.toFixed(1) + '" y="' + (n.ly + 3).toFixed(1) + '" text-anchor="' + (n.end ? "end" : "start") + '" fill="var(--ink-soft)" font-size="8.5" font-family="IBM Plex Mono, monospace" stroke="var(--void)" stroke-width="3" paint-order="stroke" stroke-linejoin="round">' + h(n.label) + "</text>" +
           '<circle class="hit" cx="' + n.px.toFixed(1) + '" cy="' + n.py.toFixed(1) + '" r="9" fill="transparent" data-index="' + attr(n.key) + '"/>' +
         "</g>"
@@ -2388,7 +2433,7 @@
     if (!tip) return;
     let lastSvg = null;
     document.addEventListener("pointermove", function (ev) {
-      const svg = ev.target.closest && ev.target.closest("svg.spark");
+      const svg = ev.target.closest && ev.target.closest("svg.spark, svg.multi-spark");
       if (lastSvg && lastSvg !== svg) {
         const prev = lastSvg.querySelector(".scope-cur");
         if (prev) prev.setAttribute("hidden", "");
@@ -2401,7 +2446,10 @@
         }).filter(function (p) { return Number.isFinite(p.x); });
         const box = svg.getBoundingClientRect();
         const vb = svg.viewBox.baseVal;
-        const x = ((ev.clientX - box.left) / Math.max(1, box.width)) * vb.width;
+        const rawX = ((ev.clientX - box.left) / Math.max(1, box.width)) * vb.width;
+        const plotL = Number(svg.getAttribute("data-plot-l") || 0);
+        const plotR = Number(svg.getAttribute("data-plot-r") || vb.width);
+        const x = Math.max(plotL, Math.min(plotR, rawX));
         let best = pack[0];
         let bestD = 1e9;
         pack.forEach(function (p) {
@@ -2409,17 +2457,20 @@
           if (d < bestD) { bestD = d; best = p; }
         });
         const cur = svg.querySelector(".scope-cur");
-        if (cur && best) {
+        if (cur) {
           cur.removeAttribute("hidden");
           const line = cur.querySelector(".scope-v");
           const dot = cur.querySelector(".scope-dot");
           if (line) {
-            line.setAttribute("x1", best.x);
-            line.setAttribute("x2", best.x);
+            line.setAttribute("x1", x);
+            line.setAttribute("x2", x);
           }
-          if (dot) {
+          if (dot && best && Number.isFinite(best.v) && best.v >= 0) {
+            dot.removeAttribute("hidden");
             dot.setAttribute("cx", best.x);
             dot.setAttribute("cy", best.y);
+          } else if (dot) {
+            dot.setAttribute("hidden", "");
           }
         }
       }
