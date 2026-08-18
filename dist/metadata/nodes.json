@@ -1,6 +1,7 @@
 {
   "global": {
-    "show_globe": true
+    "show_globe": true,
+    "traffic_reset_day": 1
   },
   "nodes": {}
 }

@@ -1,16 +1,67 @@
 {
   "name": "Line Grid",
   "short": "line-grid",
-  "description": "A faithful Line Grid port for Komari Monitor, using native RPC2 metrics with optional UUID metadata extensions.",
-  "version": "0.2.4",
+  "description": "Faithful Line Grid for Komari RPC2 with desktop/mobile responsive layouts, privacy-aware finance, city caching, sortable node lists and admin return-route persistence.",
+  "version": "0.3.13",
   "author": "line-grid theme contributors / DeterminantMatrix",
   "url": "https://github.com/DeterminantMatrix/Komari-line-grid",
+  "preview": "preview.svg",
   "configuration": {
     "type": "managed",
     "name": {
       "en": "Line Grid Settings",
       "zh-CN": "Line Grid 设置"
     },
-    "data": []
+    "data": [
+      {
+        "key": "offlineServerPosition",
+        "type": "select",
+        "name": {
+          "en": "Offline server position",
+          "zh-CN": "离线节点位置"
+        },
+        "help": {
+          "en": "First, Keep, or Last. Within each group nodes follow Komari weight order.",
+          "zh-CN": "First / Keep / Last；组内严格按 Komari weight 顺序。"
+        },
+        "options": "First,Keep,Last",
+        "default": "Last"
+      },
+      {
+        "key": "showGlobe",
+        "type": "switch",
+        "name": {
+          "en": "Show globe",
+          "zh-CN": "显示地球"
+        },
+        "default": true
+      },
+      {
+        "key": "trafficResetDay",
+        "type": "number",
+        "name": {
+          "en": "Traffic reset day",
+          "zh-CN": "流量账期重置日"
+        },
+        "help": {
+          "en": "Visual billing-window hint only. Per-node metadata can override it.",
+          "zh-CN": "仅用于账期视觉提示；可在 UUID 元数据中按节点覆盖。"
+        },
+        "default": 1
+      },
+      {
+        "key": "enableIpGeoAsn",
+        "type": "switch",
+        "name": {
+          "en": "Enable GeoIP / ASN enrichment",
+          "zh-CN": "启用 GeoIP / ASN 识别"
+        },
+        "help": {
+          "en": "Opt-in. Full node IPs visible to your current account are sent to public GeoIP providers. Results are cached without storing the IP in the cache key.",
+          "zh-CN": "隐私敏感，默认关闭。开启后会将当前账号可见的完整节点 IP 发送给公共 GeoIP 服务；缓存键不保存明文 IP。"
+        },
+        "default": false
+      }
+    ]
   }
 }

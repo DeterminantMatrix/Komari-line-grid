@@ -1,21 +1,20 @@
 # Komari Line Grid
 
-将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari Monitor，并使用 Komari 当前 RPC2 / Metric Store 数据接口。
+将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari Monitor，并使用 Komari 当前 RPC2 / Metric Store 数据接口。当前仓库包含可直接导入的 v0.3.13 构建产物。
 
-## v0.2.0
+## v0.3.13
 
-v0.2 是一次前端重构，不再“参考 line-grid 重新实现”，而是回到上游的布局逻辑，仅替换数据层。主要变化：
+v0.3.13 延续上游 line-grid 的布局节奏，同时补齐 Komari 场景下的数据、移动端和管理功能：
 
-- 恢复 line-grid 原版的三种节点布局、地球标签避让、地区侧栏和月度 ruler
-- 2 秒实时刷新改为局部 DOM patch，不再整页重绘
+- 桌面端和移动端自适应布局，包含节点列表、详情、网络和资源视图
+- 使用 RPC2 / Metric Store 展示实时状态、Ping 历史与流量账期
+- 支持节点地区、城市、经纬度、服务商、回程线路等 UUID 元数据
+- 节点列表支持排序、地区筛选、延迟等级和离线状态展示
+- 财务信息按币种安全聚合，并支持账期重置日与续费提醒
 - 离线且没有最新报告的节点显示 `—`，不再伪装成 CPU/RAM/Disk 0%
 - 过滤 Komari 的异常/永久到期哨兵日期（例如 2100 年以后）
 - 负数或无效续费价格不再当作正常金额展示
-- Network 页默认使用“全部平均”，KPI 与曲线语义保持一致
-- Resource 页按币种安全聚合月成本，混合币种不再伪造单一总额
-- 移动端重新布局，列表不再强制 1080px 桌面宽度
 - 页脚保留 `Powered by Komari Monitor`
-- 支持在元数据中提供 `longitude` / `latitude`，精确定位地球节点
 
 ## Komari 数据接口
 
@@ -36,7 +35,7 @@ v0.2 是一次前端重构，不再“参考 line-grid 重新实现”，而是�
 https://github.com/DeterminantMatrix/Komari-line-grid
 ```
 
-每次 `main` 更新都会运行验证、打包，并按 `komari-theme.json` 的版本创建/更新 GitHub Release，Release 附件为 `komari-line-grid.zip`。
+仓库的 `main` 分支包含最新静态资源；重新打包会生成 `komari-line-grid.zip`，可直接上传到 Komari 或作为主题发布附件。
 
 也可以本地打包：
 
@@ -48,14 +47,15 @@ ZIP 根目录：
 
 ```text
 komari-theme.json
+preview.svg
 dist/
   index.html
   css/app.css
-  js/app.js
-  js/charts.js
-  js/komari-api.js
+  js/*.js
   metadata/nodes.json
 ```
+
+`dist/index.html` 是自包含发布页面；`dist/js/` 中的拆分文件用于维护和调试，发布页面不依赖本地脚本路径。
 
 ## 扩展元数据
 
@@ -101,11 +101,9 @@ dist/metadata/nodes.json
 验证包括：
 
 - JavaScript 语法检查
-- RPC2 adapter mock 测试
-- 离线缺数据语义
-- 异常到期/负价格清洗
-- 地球标签避让与增量刷新关键不变量
-- JSON 与主题引用完整性
+- JSON 与主题元数据完整性
+- 自包含 HTML 发布页检查
+- ZIP 发布包文件完整性
 
 ## 上游与许可
 
