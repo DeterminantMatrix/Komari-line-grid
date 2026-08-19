@@ -196,19 +196,8 @@
     const city = fallbackCity(server);
     return { code: cc, city: city, label: city ? cc + ' · ' + city : cc };
   }
-
-  // Coarse public-domain-style geographic outlines, intentionally simplified.
-  // They are visual orientation aids, not a GIS dataset.
-  const WORLD_OUTLINES = [
-    [[-168,72],[-145,70],[-130,55],[-124,48],[-123,38],[-117,32],[-105,25],[-97,19],[-85,22],[-81,30],[-75,40],[-66,47],[-60,54],[-78,62],[-100,72],[-130,72],[-168,72]],
-    [[-82,12],[-75,8],[-70,-5],[-63,-15],[-58,-25],[-52,-33],[-58,-43],[-67,-55],[-74,-48],[-75,-32],[-80,-15],[-82,0],[-82,12]],
-    [[-10,36],[-6,44],[4,51],[15,56],[28,58],[42,55],[55,49],[68,52],[84,56],[100,60],[120,58],[140,50],[150,42],[145,32],[130,30],[122,20],[110,12],[100,7],[88,20],[75,24],[62,30],[48,28],[36,34],[28,40],[18,42],[8,39],[-10,36]],
-    [[-17,35],[-5,36],[10,33],[25,31],[35,23],[43,11],[51,2],[45,-12],[38,-25],[30,-34],[18,-35],[5,-30],[-5,-18],[-12,0],[-17,16],[-17,35]],
-    [[112,-11],[126,-13],[138,-18],[151,-26],[153,-37],[144,-43],[130,-40],[116,-34],[112,-22],[112,-11]],
-    [[130,32],[136,35],[141,41],[145,44],[143,36],[139,33],[130,32]],
-    [[-8,50],[-5,58],[-3,59],[1,54],[-2,50],[-8,50]],
-    [[-52,60],[-44,66],[-34,72],[-26,76],[-40,82],[-55,80],[-62,70],[-52,60]],
-  ];
+  // Detailed coastline rings, loaded before the app in the same lon/lat format as upstream ProbeLand.
+  const WORLD_OUTLINES = Array.isArray(window.ProbeLand) ? window.ProbeLand : [];
 
   const CARRIER = { telecom: "电信", unicom: "联通", mobile: "移动" };
   const ROUTE_PRESET_ALL = [
@@ -753,6 +742,15 @@
     );
   }
 
+  function trafficResetDays(server) {
+    if (!server || !server.period_end) return null;
+    const raw = String(server.period_end).slice(0, 10);
+    const end = new Date(raw + "T00:00:00");
+    const ms = end.getTime();
+    if (!Number.isFinite(ms)) return null;
+    return Math.max(0, Math.ceil((ms - Date.now()) / 86400000));
+  }
+
   function quotaMini(server) {
     const used = server.traffic_used == null ? null : Number(server.traffic_used);
     const limit = Number(server.traffic_limit || 0);
@@ -762,6 +760,7 @@
         '<span class="quota-cell-n">' + fmtBytes(used, 1) + (limit ? " / " + fmtBytes(limit, 2) : "") + "</span>" +
         '<span class="quota-cell-mobile">' + fmtBytes(used, 1) + "</span>" +
         '<span class="quota-mini' + quotaTone(p) + '" style="--p:' + (limit && used != null ? p : 0) + '%"><i></i></span>' +
+        '<span class="quota-reset">' + (trafficResetDays(server) == null ? "重置 —" : ("距重置 " + trafficResetDays(server) + " 天")) + "</span>" +
       "</span>"
     );
   }
@@ -897,7 +896,7 @@
               '<span class="cc">' + h(displayCountry(server) || "") + "</span>" +
               '<span class="name">' + h(server.name || "未命名") + "</span>" +
               '<span class="dot' + (server.online ? "" : " is-off") + '"></span>' +
-              '<span class="status">' + (server.online ? "在线" : "离线") + "</span>" +
+              '<span class="status ' + (server.online ? "is-online" : "is-offline") + '">' + (server.online ? "在线" : "离线") + "</span>" +
             "</div>" +
             '<div class="speeds">' +
               '<span>实时网速　↓ <b>' + fmtSpeed(server.download_speed) + "</b>　↑ <b>" + fmtSpeed(server.upload_speed) + "</b></span>" +
@@ -926,7 +925,7 @@
       '<button class="row" data-index="' + attr(i) + '" type="button">' +
         '<span class="cc">' + h(displayCountry(server) || "") + "</span>" +
         '<span class="name">' + h(server.name || "未命名") + "</span>" +
-        '<span class="status">' + (server.online ? "在线" : "离线") + "</span>" +
+        '<span class="status ' + (server.online ? "is-online" : "is-offline") + '">' + (server.online ? "在线" : "离线") + "</span>" +
         '<span class="speeds row-speeds">' + rowSpeedPair(server) + '</span>' +
         '<span class="latency-cell"><span class="ms' + latencyTone(ms) + '">' + (ms == null ? "—" : ms + " ms") + '</span><small class="' + lossTone(pingLoss(server)).trim() + '">' + lossText(pingLoss(server)) + '</small></span>' +
         sparkOf(server) +
@@ -969,7 +968,7 @@
             '<span class="cc">' + h(displayCountry(server) || "") + "</span>" +
             '<span class="name">' + h(server.name || "未命名") + "</span>" +
             '<span class="dot' + (server.online ? "" : " is-off") + '"></span>' +
-            '<span class="status">' + (server.online ? "在线" : "离线") + " · " + h(server.region_city || server.region_name || "") + "</span>" +
+            '<span class="status ' + (server.online ? "is-online" : "is-offline") + '">' + (server.online ? "在线" : "离线") + " · " + h(server.region_city || server.region_name || "") + "</span>" +
           "</div>" +
           '<span class="more">打开窗口 →</span>' +
         "</div>" +
@@ -1609,10 +1608,27 @@
     const right = [];
     items.forEach(function (n) {
       let side = n.px >= cx ? "R" : "L";
-      if (globeLabelSide[n.key] && Math.abs(n.px - cx) < 22) side = globeLabelSide[n.key];
-      if (side === "L" && n.w > 64) side = "R";
+      if (globeLabelSide[n.key] && Math.abs(n.px - cx) < 18) side = globeLabelSide[n.key];
       (side === "L" ? left : right).push(n);
     });
+
+    // Keep label counts visually balanced. Prefer moving nodes closest to the
+    // central meridian so geographic placement still dominates the layout.
+    function rebalance(from, to) {
+      if (from.length - to.length <= 2) return;
+      const move = from.slice().sort(function (a, b) {
+        return Math.abs(a.px - cx) - Math.abs(b.px - cx) || a.w - b.w || a.i - b.i;
+      });
+      while (from.length - to.length > 2 && move.length) {
+        const n = move.shift();
+        const pos = from.indexOf(n);
+        if (pos < 0) continue;
+        from.splice(pos, 1);
+        to.push(n);
+      }
+    }
+    rebalance(right, left);
+    rebalance(left, right);
 
     function stack(list, x, end) {
       list.sort(function (a, b) { return a.py - b.py || a.i - b.i; });
@@ -1632,8 +1648,10 @@
       });
     }
 
-    stack(left, 70, true);
-    stack(right, 270, false);
+    // Keep both label stacks fully outside the globe. The wider symmetric
+    // viewBox leaves enough room for long VPS names on either side.
+    stack(left, 126, true);
+    stack(right, 334, false);
     return items;
   }
 
@@ -1690,7 +1708,7 @@
   }
 
   function globeMarkup() {
-    const cx = 168;
+    const cx = 230;
     const cy = 112;
     const R = 92;
     const lon0 = globeLon * Math.PI / 180;
@@ -1744,7 +1762,7 @@
           .replace('stroke-width="0.9"', 'stroke-width="' + (k === 0 ? 1.6 : 1.1) + '" style="stroke-opacity:' + (sweepBase - k * 0.06).toFixed(2) + '"');
       }
     }
-    wire += '<line class="globe-base" x1="48" y1="' + (cy + R + 16) + '" x2="288" y2="' + (cy + R + 16) + '" stroke-width="1"/>';
+    wire += '<line class="globe-base" x1="110" y1="' + (cy + R + 16) + '" x2="350" y2="' + (cy + R + 16) + '" stroke-width="1"/>';
     const laid = layoutGlobeLabels(cx, ortho);
     let links = "";
     const online = laid.filter(function (n) { return n.s.online; });
@@ -1772,7 +1790,7 @@
       );
     }).join("");
     return wire + links + pins +
-      '<text class="globe-caption" x="168" y="' + (cy + R + 28) + '" text-anchor="middle" font-size="8" font-family="IBM Plex Mono, monospace" letter-spacing="1.4">' + globeCaption() + "</text>";
+      '<text class="globe-caption" x="230" y="' + (cy + R + 28) + '" text-anchor="middle" font-size="8" font-family="IBM Plex Mono, monospace" letter-spacing="1.4">' + globeCaption() + "</text>";
   }
 
   function globePanel() {
@@ -1792,7 +1810,7 @@
     return (
       '<section class="home-globe" aria-label="节点地球">' +
         '<div class="atlas">' +
-          '<svg viewBox="0 0 420 240" preserveAspectRatio="xMidYMid meet">' +
+          '<svg viewBox="0 0 460 240" preserveAspectRatio="xMidYMid meet">' +
             globeMarkup() +
           "</svg>" +
         "</div>" +

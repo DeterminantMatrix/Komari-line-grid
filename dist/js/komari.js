@@ -133,11 +133,15 @@
   }
 
   function billingWindow(resetDay) {
-    const day = Math.max(1, Math.min(28, Number(resetDay) || 1));
+    const day = Math.max(1, Math.min(31, Number(resetDay) || 1));
     const now = new Date();
-    let start = new Date(now.getFullYear(), now.getMonth(), day);
-    if (now < start) start = new Date(now.getFullYear(), now.getMonth() - 1, day);
-    const end = new Date(start.getFullYear(), start.getMonth() + 1, day);
+    function resetDate(year, month) {
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      return new Date(year, month, Math.min(day, lastDay));
+    }
+    let start = resetDate(now.getFullYear(), now.getMonth());
+    if (now < start) start = resetDate(now.getFullYear(), now.getMonth() - 1);
+    const end = resetDate(start.getFullYear(), start.getMonth() + 1);
     return { start: dateOnly(start), end: dateOnly(end), resetDay: day };
   }
 
@@ -145,6 +149,60 @@
     const globalMeta = meta && meta.global && typeof meta.global === 'object' ? meta.global : {};
     const nodeMeta = meta && meta.nodes && meta.nodes[uuid] && typeof meta.nodes[uuid] === 'object' ? meta.nodes[uuid] : {};
     return { global: globalMeta, node: nodeMeta };
+  }
+
+
+  function parseTrafficResetOverrides(raw, nodes) {
+    const out = {};
+    const byUuid = {};
+    const byName = {};
+    (nodes || []).forEach(function (node) {
+      const uuid = String(node && (node.uuid || node.UUID || node.id) || '').trim();
+      const name = String(node && (node.name || node.Name) || '').trim();
+      if (uuid) byUuid[uuid.toLowerCase()] = uuid;
+      if (name) {
+        const key = name.toLowerCase();
+        (byName[key] = byName[key] || []).push(uuid);
+      }
+    });
+
+    function apply(key, value) {
+      const day = Math.max(1, Math.min(31, Number(value) || 0));
+      if (!day) return;
+      const token = String(key || '').trim();
+      if (!token) return;
+      const uuid = byUuid[token.toLowerCase()];
+      if (uuid) {
+        out[uuid] = day;
+        return;
+      }
+      const matches = byName[token.toLowerCase()] || [];
+      matches.forEach(function (id) { if (id) out[id] = day; });
+    }
+
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      Object.keys(raw).forEach(function (key) { apply(key, raw[key]); });
+      return out;
+    }
+    const text = String(raw || '').trim();
+    if (!text) return out;
+    if (text[0] === '{') {
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          Object.keys(parsed).forEach(function (key) { apply(key, parsed[key]); });
+          return out;
+        }
+      } catch (e) {}
+    }
+    text.split(/\r?\n/).forEach(function (line) {
+      line = String(line || '').replace(/\s+#.*$/, '').trim();
+      if (!line || line[0] === '#') return;
+      const m = line.match(/^(.*?)\s*(?:=|:|\t)\s*(\d{1,2})\s*$/);
+      if (!m) return;
+      apply(m[1], m[2]);
+    });
+    return out;
   }
 
   function mapLivePing(rawPing, existing) {
@@ -285,11 +343,19 @@
     const pub = publicInfoValue(publicRaw);
     const metaGlobal = metadata && metadata.global || {};
     const settings = pub.theme_settings && typeof pub.theme_settings === 'object' ? pub.theme_settings : {};
+    const resetOverrides = parseTrafficResetOverrides(settings.trafficResetOverrides, nodes);
+    const sourceNodes = metadata && metadata.nodes && typeof metadata.nodes === 'object' ? metadata.nodes : {};
+    const effectiveNodes = Object.assign({}, sourceNodes);
+    nodes.forEach(function (node) {
+      const uuid = String(node && (node.uuid || node.UUID || node.id) || '');
+      if (!uuid || resetOverrides[uuid] == null) return;
+      effectiveNodes[uuid] = Object.assign({}, sourceNodes[uuid] || {}, { traffic_reset_day: resetOverrides[uuid] });
+    });
     const effectiveMeta = {
       global: Object.assign({}, metaGlobal, {
         traffic_reset_day: metaGlobal.traffic_reset_day || settings.trafficResetDay || 1,
       }),
-      nodes: metadata && metadata.nodes || {},
+      nodes: effectiveNodes,
     };
     const servers = nodes.map(function (node, index) {
       const uuid = String(node.uuid || node.UUID || node.id || '');

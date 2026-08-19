@@ -553,6 +553,16 @@ html[data-theme="light"][data-fx-grain="1"] .fx-grain { opacity: var(--fx-grain-
   flex: none;
 }
 
+.status.is-online {
+  color: var(--ink-soft);
+  color: color-mix(in srgb, var(--ink-soft) 78%, var(--live) 22%);
+}
+
+.status.is-offline {
+  color: var(--ink-soft);
+  color: color-mix(in srgb, var(--ink-soft) 76%, var(--down) 24%);
+}
+
 .speeds {
   display: flex;
   justify-content: space-between;
@@ -683,17 +693,22 @@ html[data-theme="light"][data-fx-grain="1"] .fx-grain { opacity: var(--fx-grain-
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
-.quota-cell-n {
+.quota-cell-n,
+.quota-reset {
   font-size: 10px;
   line-height: 1.2;
   color: var(--ink-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.quota-reset {
+  color: var(--ink-dim);
 }
 
 .quota-cell-mobile { display: none; }
@@ -2466,7 +2481,8 @@ body.modal-open { overflow: hidden; }
     min-width: 0;
     justify-self: stretch;
   }
-  .row .quota-cell-n { display: none !important; }
+  .row .quota-cell-n,
+  .row .quota-reset { display: none !important; }
   .row .quota-cell-mobile {
     display: block;
     overflow: hidden;
