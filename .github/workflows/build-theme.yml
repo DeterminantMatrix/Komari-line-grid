@@ -1,0 +1,29 @@
+name: Build theme
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test
+        run: ./scripts/test.sh
+      - name: Package
+        run: ./scripts/package.sh
+      - name: Upload theme package
+        uses: actions/upload-artifact@v4
+        with:
+          name: komari-line-grid-theme
+          path: komari-line-grid-v*.zip
+          if-no-files-found: error

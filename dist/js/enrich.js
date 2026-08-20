@@ -96,19 +96,31 @@
     { id: 'ipwho.is', url: function (ip) { return 'https://ipwho.is/' + encodeURIComponent(ip); }, parse: parseIpWho },
     { id: 'ipapi.co', url: function (ip) { return 'https://ipapi.co/' + encodeURIComponent(ip) + '/json/'; }, parse: parseIpApi },
   ];
-  let geoCursor = 0;
+  function geoProvider(value) {
+    const wanted = String(value || 'ip.sb').trim().toLowerCase();
+    return GEO_PROVIDERS.find(function (provider) { return provider.id.toLowerCase() === wanted; }) || GEO_PROVIDERS[0];
+  }
 
-  function lookupIpGeo(ip) {
+  function geoProviderOrder(primaryValue, allowFallback) {
+    const primary = geoProvider(primaryValue);
+    if (!allowFallback) return [primary];
+    return [primary].concat(GEO_PROVIDERS.filter(function (provider) { return provider.id !== primary.id; }));
+  }
+
+  function lookupIpGeo(ip, options) {
     const raw = String(ip || '').trim();
     if (!raw || raw.indexOf('*') >= 0) return Promise.resolve(null);
-    const cacheKey = GEO_CACHE_PREFIX + hashKey(raw);
+    options = options || {};
+    const primary = geoProvider(options.provider);
+    const allowFallback = options.fallback === true;
+    const cacheKey = GEO_CACHE_PREFIX + primary.id + ':' + hashKey(raw);
+    const inflightKey = primary.id + ':' + (allowFallback ? 'fallback:' : 'single:') + raw;
     const cached = cacheRead(cacheKey, GEO_CACHE_TTL);
     if (cached && validGeo(cached)) return Promise.resolve(cached);
     const neg = cacheRead(cacheKey + ':neg', GEO_NEG_TTL);
     if (neg) return Promise.resolve(null);
-    if (inflightGeo.has(raw)) return inflightGeo.get(raw);
-    const start = geoCursor++ % GEO_PROVIDERS.length;
-    const ordered = GEO_PROVIDERS.slice(start).concat(GEO_PROVIDERS.slice(0, start));
+    if (inflightGeo.has(inflightKey)) return inflightGeo.get(inflightKey);
+    const ordered = geoProviderOrder(primary.id, allowFallback);
     const task = (async function () {
       for (let i = 0; i < ordered.length; i += 1) {
         try {
@@ -117,6 +129,7 @@
           const data = await res.json();
           const geo = ordered[i].parse(data);
           if (validGeo(geo)) {
+            geo.provider = ordered[i].id;
             cacheWrite(cacheKey, geo);
             return geo;
           }
@@ -125,8 +138,8 @@
       cacheWrite(cacheKey + ':neg', true);
       return null;
     })();
-    inflightGeo.set(raw, task);
-    return task.finally(function () { inflightGeo.delete(raw); });
+    inflightGeo.set(inflightKey, task);
+    return task.finally(function () { inflightGeo.delete(inflightKey); });
   }
 
   function publicGeoKey(uuid) {
@@ -166,10 +179,11 @@
     if (payload.enable_ip_geo_asn !== true) return payload;
     const nodes = payload.servers.filter(function (s) { return s && s._lookup_ip && String(s._lookup_ip).indexOf('*') < 0; });
     const batchSize = 4;
+    const lookupOptions = { provider: payload.geo_ip_provider || 'ip.sb', fallback: payload.geo_ip_fallback === true };
     for (let i = 0; i < nodes.length; i += batchSize) {
       const batch = nodes.slice(i, i + batchSize);
       const results = await Promise.all(batch.map(function (s) {
-        return lookupIpGeo(s._lookup_ip).then(function (geo) { return { s: s, geo: geo }; });
+        return lookupIpGeo(s._lookup_ip, lookupOptions).then(function (geo) { return { s: s, geo: geo }; });
       }));
       results.forEach(function (r) {
         if (!r.geo) return;

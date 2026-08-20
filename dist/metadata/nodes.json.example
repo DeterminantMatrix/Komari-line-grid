@@ -4,7 +4,8 @@
     "show_globe": true,
     "traffic_reset_day": 1,
     "offline_server_position": "Last",
-    "location_note": "longitude/latitude 为精确定位最高优先级；没有时主题仅按城市提示或国家中心近似定位。"
+    "location_note": "longitude/latitude 为精确定位最高优先级；没有时主题仅按城市提示或国家中心近似定位。",
+    "billing_timezone": "Asia/Shanghai"
   },
   "nodes": {
     "NODE-UUID": {

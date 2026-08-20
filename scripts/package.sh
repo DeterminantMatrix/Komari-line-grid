@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="$ROOT/komari-line-grid.zip"
+cd "$ROOT"
+VERSION="$(node -p "require('./komari-theme.json').version")"
+OUT="$ROOT/komari-line-grid-v${VERSION}.zip"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+node scripts/build-release.js >/dev/null
 rm -f "$OUT"
 mkdir -p "$TMP/dist"
 cp "$ROOT/komari-theme.json" "$TMP/komari-theme.json"
