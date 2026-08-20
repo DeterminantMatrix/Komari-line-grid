@@ -2655,3 +2655,169 @@ body.modal-open { overflow: hidden; }
 /* v0.3.15 upstream texture parity */
 .fx-grain { transition: opacity 1.35s cubic-bezier(0.45, 0.05, 0.15, 1); }
 .scope-v { shape-rendering: crispEdges; }
+
+/* v0.4.0 — architecture/stability pass: search, anomaly filter, last-seen and traffic forecast */
+.status {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1.15;
+}
+.status.is-compact { align-items: flex-end; }
+.status small {
+  display: block;
+  max-width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.row > .status.is-offline small { color: color-mix(in srgb, var(--ink-dim) 78%, var(--down) 22%); }
+.slab-region {
+  color: var(--ink-dim);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list-bar-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.filter-pill {
+  appearance: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  padding: 4px 1px 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-pill b { color: inherit; font-weight: 500; }
+.filter-pill:hover,
+.filter-pill:focus-visible,
+.filter-pill.is-on {
+  color: var(--ink);
+  border-bottom-color: var(--gold);
+  outline: none;
+}
+.filter-pill.is-on b { color: var(--down); }
+
+.node-search {
+  flex: 0 1 320px;
+  min-width: 150px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-dim);
+}
+.node-search > span {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+}
+.node-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: 11px/1.4 var(--sans);
+  padding: 4px 0 5px;
+}
+.node-search input::placeholder { color: var(--ink-faint); }
+.node-search:focus-within { border-bottom-color: var(--line-strong); color: var(--ink-soft); }
+
+.filter-notice {
+  min-height: 34px;
+  margin: -2px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .03em;
+}
+.filter-notice button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-notice button:hover,
+.filter-notice button:focus-visible { color: var(--ink); outline: none; }
+
+.traffic-forecast {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  color: var(--ink-dim);
+  font-size: 11px;
+}
+.traffic-forecast > span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.traffic-forecast b { color: var(--ink-soft); font-weight: 500; }
+.traffic-forecast small { color: var(--ink-dim); font-size: 10px; }
+.traffic-forecast.is-good b { color: var(--live); }
+.traffic-forecast.is-bad b { color: var(--down); }
+
+/* Preserve line-grid density even with the extra status metadata. */
+.row > .status { min-width: 0; }
+.row > .status small { max-width: 48px; font-size: 7.5px; }
+
+@media (max-width: 1100px) {
+  .node-search { flex: 1 1 220px; }
+  .row > .status small { max-width: 96px; }
+}
+
+@media (max-width: 720px) {
+  .list-bar { align-items: flex-start; gap: 8px; }
+  .list-bar-left { flex-wrap: wrap; gap: 8px 12px; }
+  .list-bar-k { padding-top: 4px; }
+  .filter-pill { font-size: 9px; }
+  .node-search {
+    order: 3;
+    flex: 1 0 100%;
+    width: 100%;
+    max-width: none;
+  }
+  .node-search input { font-size: 10px; }
+  .filter-notice { font-size: 8px; align-items: flex-start; }
+  .status small { font-size: 7px; max-width: 66px; }
+  .traffic-forecast {
+    grid-template-columns: auto 1fr;
+    gap: 5px 8px;
+    padding: 7px 8px;
+    font-size: 9px;
+  }
+  .traffic-forecast small { grid-column: 1 / -1; font-size: 8px; }
+}

@@ -1,8 +1,8 @@
 {
   "name": "Line Grid",
   "short": "line-grid",
-  "description": "Faithful Line Grid for Komari RPC2 with upstream-style detailed globe coastlines, reliable traffic-cycle persistence, saved-value feedback, balanced labels, responsive layouts, privacy-aware finance and admin persistence.",
-  "version": "0.3.22",
+  "description": "Line Grid v0.4.2 for Komari RPC2: stable three-level globe quality, billing-period traffic semantics, anomaly/search workflow, last-seen status, traffic forecasts, incremental live updates, privacy-aware finance and reproducible self-contained builds.",
+  "version": "0.4.2",
   "author": "line-grid theme contributors / DeterminantMatrix",
   "url": "https://github.com/DeterminantMatrix/Komari-line-grid",
   "preview": "preview.svg",
@@ -44,6 +44,20 @@
         "default": true
       },
       {
+        "key": "globeQuality",
+        "type": "select",
+        "name": {
+          "en": "Globe quality",
+          "zh-CN": "地球精度"
+        },
+        "help": {
+          "en": "Low uses simplified continents and the lowest refresh rate; Medium keeps detailed land with reduced coastline sampling; High uses the full coastline and densest links. Quality is fixed while running to avoid visual flicker.",
+          "zh-CN": "低：简化大陆+最低刷新率；中：完整大陆但降低海岸线采样与连线密度；高：完整海岸线、最密连线和最高刷新率。运行时固定档位，不再自动切换精度，避免闪烁。"
+        },
+        "options": "Low,Medium,High",
+        "default": "Medium"
+      },
+      {
         "type": "title",
         "name": {
           "en": "Traffic cycle",
@@ -66,8 +80,8 @@
       {
         "type": "textbox",
         "name": {
-          "en": "<style>#trafficResetOverrides{display:none!important}</style><iframe title=\"Per-node traffic reset editor\" src=\"/themes/line-grid/dist/admin-reset-editor.html?v=0322\" style=\"display:block;width:100%;height:470px;border:0;background:transparent\" loading=\"eager\"></iframe>",
-          "zh-CN": "<style>#trafficResetOverrides{display:none!important}</style><iframe title=\"节点独立流量重置日编辑器\" src=\"/themes/line-grid/dist/admin-reset-editor.html?v=0322\" style=\"display:block;width:100%;height:470px;border:0;background:transparent\" loading=\"eager\"></iframe>"
+          "en": "<style>#trafficResetOverrides{display:none!important}</style><iframe title=\"Per-node traffic reset editor\" src=\"/themes/line-grid/dist/admin-reset-editor.html?v=0400\" style=\"display:block;width:100%;height:470px;border:0;background:transparent\" loading=\"eager\"></iframe>",
+          "zh-CN": "<style>#trafficResetOverrides{display:none!important}</style><iframe title=\"节点独立流量重置日编辑器\" src=\"/themes/line-grid/dist/admin-reset-editor.html?v=0400\" style=\"display:block;width:100%;height:470px;border:0;background:transparent\" loading=\"eager\"></iframe>"
         }
       },
       {

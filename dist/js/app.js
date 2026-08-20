@@ -19,6 +19,7 @@
   let lastView = "list";
   let home = "nodes";
   let showGlobe = localStorage.getItem("mmwx-globe") !== "0";
+  let globeQuality = "medium";
   let globeLon = 80;
   let globeLat = 30;
   let globeDrag = null;
@@ -30,12 +31,18 @@
   let pulse = ProbeDemo.monthPulse();
   let liveMode = false;
   let seriesCache = {};
+  let seriesCacheOrder = [];
+  const SERIES_CACHE_MAX = 64;
   let lastWindowKey = "";
   let subpageLiveTick = 0;
   let accessState = { known: false, logged_in: false, is_admin: false };
   let listSortKey = "";
   let listSortDir = 0; // 0=Komari default, -1=desc, 1=asc
   let regionFilter = "";
+  let nodeQuery = "";
+  let anomalyFilter = false;
+  let globePaintRAF = 0;
+  let globeLiveTick = 0;
   let financeSortKey = "";
   let financeSortDir = 0; // 0=default monthly desc, -1=desc, 1=asc
 
@@ -198,6 +205,29 @@
   }
   // Detailed coastline rings, loaded before the app in the same lon/lat format as upstream ProbeLand.
   const WORLD_OUTLINES = Array.isArray(window.ProbeLand) ? window.ProbeLand : [];
+  // Lightweight orientation geometry used only by the explicit Low globe mode.
+  const COARSE_WORLD_OUTLINES = [
+    [[-168,72],[-145,70],[-130,55],[-124,48],[-123,38],[-117,32],[-105,25],[-97,19],[-85,22],[-81,30],[-75,40],[-66,47],[-60,54],[-78,62],[-100,72],[-130,72],[-168,72]],
+    [[-82,12],[-75,8],[-70,-5],[-63,-15],[-58,-25],[-52,-33],[-58,-43],[-67,-55],[-74,-48],[-75,-32],[-80,-15],[-82,0],[-82,12]],
+    [[-10,36],[-6,44],[4,51],[15,56],[28,58],[42,55],[55,49],[68,52],[84,56],[100,60],[120,58],[140,50],[150,42],[145,32],[130,30],[122,20],[110,12],[100,7],[88,20],[75,24],[62,30],[48,28],[36,34],[28,40],[18,42],[8,39],[-10,36]],
+    [[-17,35],[-5,36],[10,33],[25,31],[35,23],[43,11],[51,2],[45,-12],[38,-25],[30,-34],[18,-35],[5,-30],[-5,-18],[-12,0],[-17,16],[-17,35]],
+    [[112,-11],[126,-13],[138,-18],[151,-26],[153,-37],[144,-43],[130,-40],[116,-34],[112,-22],[112,-11]],
+    [[130,32],[136,35],[141,41],[145,44],[143,36],[139,33],[130,32]],
+    [[-8,50],[-5,58],[-3,59],[1,54],[-2,50],[-8,50]],
+    [[-52,60],[-44,66],[-34,72],[-26,76],[-40,82],[-55,80],[-62,70],[-52,60]]
+  ];
+
+  function normalizeGlobeQuality(value) {
+    const q = String(value || "medium").trim().toLowerCase();
+    return q === "low" || q === "high" ? q : "medium";
+  }
+
+  function globeProfile() {
+    const q = normalizeGlobeQuality(globeQuality);
+    if (q === "low") return { key: "low", land: "coarse", coastStride: 1, gridLon: 60, gridLat: 30, curveStep: 8, sweepCount: 0, linkMode: 0, idleMs: 440 };
+    if (q === "high") return { key: "high", land: "detailed", coastStride: 1, gridLon: 30, gridLat: 30, curveStep: 3, sweepCount: 6, linkMode: 2, idleMs: 120 };
+    return { key: "medium", land: "detailed", coastStride: 2, gridLon: 30, gridLat: 30, curveStep: 6, sweepCount: 2, linkMode: 1, idleMs: 240 };
+  }
 
   const CARRIER = { telecom: "电信", unicom: "联通", mobile: "移动" };
   const ROUTE_PRESET_ALL = [
@@ -245,6 +275,26 @@
   function fmtDays(sec) {
     if (sec == null) return "—";
     return Math.floor(sec / U.DAY) + " 天";
+  }
+
+  function lastSeenText(server) {
+    if (!server || server.online || server.last_seen_at == null) return "";
+    const at = Number(server.last_seen_at);
+    if (!Number.isFinite(at)) return "";
+    const sec = Math.max(0, Math.floor((Date.now() - at) / 1000));
+    if (sec < 45) return "刚刚";
+    if (sec < 3600) return Math.max(1, Math.floor(sec / 60)) + " 分钟前";
+    if (sec < 86400) return Math.max(1, Math.floor(sec / 3600)) + " 小时前";
+    if (sec < 86400 * 60) return Math.max(1, Math.floor(sec / 86400)) + " 天前";
+    const d = new Date(at);
+    return pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  }
+
+  function statusHTML(server, compact) {
+    const online = !!(server && server.online);
+    const seen = online ? "" : lastSeenText(server);
+    const detail = seen ? '<small>' + h(seen) + '</small>' : '';
+    return '<span class="status ' + (online ? 'is-online' : 'is-offline') + (compact ? ' is-compact' : '') + '"><span>' + (online ? '在线' : '离线') + '</span>' + detail + '</span>';
   }
 
   function pct(used, total) {
@@ -751,12 +801,80 @@
     return Math.max(0, Math.ceil((ms - Date.now()) / 86400000));
   }
 
+  function trafficQuotaPct(server) {
+    if (!server || server.traffic_used == null || !Number(server.traffic_limit)) return null;
+    return Math.max(0, (Number(server.traffic_used) / Number(server.traffic_limit)) * 100);
+  }
+
+  function trafficForecast(server) {
+    if (!server || server.traffic_used == null || !Number(server.traffic_limit)) return null;
+    const rows = (server.daily_traffic || []).slice(-7).filter(function (r) { return r && Number.isFinite(Number(r.total)); });
+    if (rows.length < 3) return { kind: 'unknown', text: '预测数据不足' };
+    const avg = rows.reduce(function (n, r) { return n + Math.max(0, Number(r.total) || 0); }, 0) / rows.length;
+    const remain = Math.max(0, Number(server.traffic_limit) - Number(server.traffic_used));
+    const reset = trafficResetDays(server);
+    if (remain <= 0) return { kind: 'bad', text: '本账期额度已耗尽', days: 0, avg: avg };
+    if (!Number.isFinite(avg) || avg <= 0) return { kind: 'good', text: '近期流量很低', avg: avg };
+    const days = Math.max(1, Math.ceil(remain / avg));
+    if (reset != null && days < reset) return { kind: 'bad', text: '预计 ' + days + ' 天后耗尽', days: days, avg: avg };
+    return { kind: 'good', text: '预计可撑过本账期', days: days, avg: avg };
+  }
+
+  function anomalyKinds(server) {
+    const out = [];
+    if (!server || !server.online) out.push('offline');
+    const ms = pingMs(server);
+    const loss = pingLoss(server);
+    const remain = remainingDaysNumber(server);
+    const traffic = trafficQuotaPct(server);
+    if (ms != null && ms > 180) out.push('latency');
+    if (loss != null && loss >= 10) out.push('loss');
+    if (remain != null && remain <= 7) out.push('expiry');
+    if (traffic != null && traffic >= 90) out.push('traffic');
+    return out;
+  }
+
+  function isAnomalous(server) { return anomalyKinds(server).length > 0; }
+
+  function anomalySummary() {
+    const out = { total: 0, offline: 0, latency: 0, loss: 0, expiry: 0, traffic: 0 };
+    (state.servers || []).forEach(function (server) {
+      const kinds = anomalyKinds(server);
+      if (kinds.length) out.total += 1;
+      kinds.forEach(function (kind) { if (out[kind] != null) out[kind] += 1; });
+    });
+    return out;
+  }
+
+  function anomalyNotice() {
+    const a = anomalySummary();
+    if (!anomalyFilter && !nodeQuery) return '';
+    const bits = [];
+    if (anomalyFilter) bits.push('异常 ' + a.total + ' · 离线 ' + a.offline + ' · 高延迟 ' + a.latency + ' · 高丢包 ' + a.loss + ' · 临期 ' + a.expiry + ' · 高流量 ' + a.traffic);
+    if (nodeQuery) bits.push('搜索：' + nodeQuery);
+    return '<div class="filter-notice"><span>' + h(bits.join('　')) + '</span><button type="button" data-clear-filters>清除筛选</button></div>';
+  }
+
+  function serverSearchText(server) {
+    const rd = regionDisplay(server);
+    const routes = effectiveRoutes(server).map(function (rt) { return [rt.carrier, rt.route_type, rt.region].filter(Boolean).join(' '); }).join(' ');
+    return [server && server.name, displayCountry(server), rd && rd.label, server && server.group, server && server.provider_name, server && server.asn, server && server.asn_org, routes].filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function serverMatchesQuery(server) {
+    const q = String(nodeQuery || '').trim().toLowerCase();
+    if (!q) return true;
+    return q.split(/\s+/).filter(Boolean).every(function (token) { return serverSearchText(server).indexOf(token) >= 0; });
+  }
+
   function quotaMini(server) {
     const used = server.traffic_used == null ? null : Number(server.traffic_used);
     const limit = Number(server.traffic_limit || 0);
     const p = used == null ? 0 : pct(used, limit);
+    const forecast = trafficForecast(server);
+    const quotaTitle = used == null ? "暂无账期流量" : (limit ? ("已用 " + p.toFixed(1) + "%" + (forecast ? " · " + forecast.text : "")) : "无限额");
     return (
-      '<span class="quota-cell hide-sm" title="' + h(used == null ? "暂无流量累计" : (limit ? ("已用 " + p.toFixed(1) + "%") : "无限额")) + '">' +
+      '<span class="quota-cell hide-sm" title="' + h(quotaTitle) + '">' +
         '<span class="quota-cell-n">' + fmtBytes(used, 1) + (limit ? " / " + fmtBytes(limit, 2) : "") + "</span>" +
         '<span class="quota-cell-mobile">' + fmtBytes(used, 1) + "</span>" +
         '<span class="quota-mini' + quotaTone(p) + '" style="--p:' + (limit && used != null ? p : 0) + '%"><i></i></span>' +
@@ -882,13 +1000,23 @@
     if (!ll) return;
     globeLon = ll[0];
     globeLat = Math.max(-78, Math.min(78, ll[1]));
-    paintGlobe();
+    queueGlobePaint();
+  }
+
+  function liveSignature(server) {
+    if (!server) return '0';
+    const p = primaryPing(server) || {};
+    return String(hashText(JSON.stringify([
+      !!server.online, server.last_seen_at || 0, server.download_speed, server.upload_speed,
+      server.cpu_pct, server.mem_used, server.disk_used, server.traffic_used,
+      p.current_ms, p.loss_pct, server.uptime, remainingDaysNumber(server), trafficResetDays(server)
+    ])));
   }
 
   function card(server, i) {
     const loss = pingLoss(server);
     return (
-      '<button class="cell' + cardTone(server) + '" data-index="' + attr(i) + '" type="button">' +
+      '<button class="cell' + cardTone(server) + '" data-index="' + attr(i) + '" data-live-sig="' + liveSignature(server) + '" type="button">' +
         '<div class="card">' +
           '<span class="card-coord">' + h(cardCoord(server)) + "</span>" +
           '<div class="card-face">' +
@@ -896,7 +1024,7 @@
               '<span class="cc">' + h(displayCountry(server) || "") + "</span>" +
               '<span class="name">' + h(server.name || "未命名") + "</span>" +
               '<span class="dot' + (server.online ? "" : " is-off") + '"></span>' +
-              '<span class="status ' + (server.online ? "is-online" : "is-offline") + '">' + (server.online ? "在线" : "离线") + "</span>" +
+              statusHTML(server, true) +
             "</div>" +
             '<div class="speeds">' +
               '<span>实时网速　↓ <b>' + fmtSpeed(server.download_speed) + "</b>　↑ <b>" + fmtSpeed(server.upload_speed) + "</b></span>" +
@@ -922,10 +1050,10 @@
     const mem = pctMetric(server.mem_used, server.mem_total);
     const disk = pctMetric(server.disk_used, server.disk_total);
     return (
-      '<button class="row" data-index="' + attr(i) + '" type="button">' +
+      '<button class="row" data-index="' + attr(i) + '" data-live-sig="' + liveSignature(server) + '" type="button">' +
         '<span class="cc">' + h(displayCountry(server) || "") + "</span>" +
         '<span class="name">' + h(server.name || "未命名") + "</span>" +
-        '<span class="status ' + (server.online ? "is-online" : "is-offline") + '">' + (server.online ? "在线" : "离线") + "</span>" +
+        statusHTML(server, false) +
         '<span class="speeds row-speeds">' + rowSpeedPair(server) + '</span>' +
         '<span class="latency-cell"><span class="ms' + latencyTone(ms) + '">' + (ms == null ? "—" : ms + " ms") + '</span><small class="' + lossTone(pingLoss(server)).trim() + '">' + lossText(pingLoss(server)) + '</small></span>' +
         sparkOf(server) +
@@ -962,13 +1090,13 @@
       return h(CARRIER[rt.carrier] || rt.carrier || "—") + " <b>" + h(rt.route_type || "—") + "</b>";
     }).join("　");
     return (
-      '<button class="slab" data-index="' + attr(i) + '" type="button">' +
+      '<button class="slab" data-index="' + attr(i) + '" data-live-sig="' + liveSignature(server) + '" type="button">' +
         '<div class="slab-top">' +
           '<div class="head">' +
             '<span class="cc">' + h(displayCountry(server) || "") + "</span>" +
             '<span class="name">' + h(server.name || "未命名") + "</span>" +
             '<span class="dot' + (server.online ? "" : " is-off") + '"></span>' +
-            '<span class="status ' + (server.online ? "is-online" : "is-offline") + '">' + (server.online ? "在线" : "离线") + " · " + h(server.region_city || server.region_name || "") + "</span>" +
+            statusHTML(server, true) + '<span class="slab-region">' + h(server.region_city || server.region_name || "") + '</span>' +
           "</div>" +
           '<span class="more">打开窗口 →</span>' +
         "</div>" +
@@ -1038,13 +1166,17 @@
     const monthCNY = aggregateCNY(state.servers || [], false);
     const monthGroups = costGroups(state.servers || [], false);
     const fxLabel = state._fx_source ? (state._fx_source === "cache" ? "汇率缓存" : state._fx_source === "stale-cache" ? "旧汇率缓存" : state._fx_source === "default" ? "备用汇率" : state._fx_source) : "汇率加载中";
+    const financeKnown = !!accessState.known;
+    const financeVisible = !!accessState.logged_in;
+    const financeValue = !financeKnown ? "…" : !financeVisible ? "*" : (monthCNY == null ? "—" : ("≈ ¥" + monthCNY.toFixed(2)));
+    const financeSub = !financeKnown ? "正在确认权限" : !financeVisible ? "登录后可见" : (h(fxLabel) + " · " + costGroupsHTML(monthGroups));
     return (
       '<section class="fleet" aria-label="集群概览">' +
         "<article><div class='lbl'>节点</div><div class='val'>" + t.all + "</div><div class='sub'>在线 " + t.online + " · 离线 " + (t.all - t.online) + "</div></article>" +
         "<article><div class='lbl'>地区</div><div class='val'>" + Object.keys(regions).length + "</div><div class='sub'>独立地域</div></article>" +
         "<article><div class='lbl'>下行合计</div><div class='val'>" + fmtSpeed(down) + "</div><div class='sub'>上行 " + fmtSpeed(up) + "</div></article>" +
         "<article><div class='lbl'>流量累计</div><div class='val'>" + fmtBytes(t.used, 1) + "</div><div class='sub'>限额 " + fmtBytes(t.limit, 2) + "</div></article>" +
-        "<article class='fleet-finance' data-finance-detail role='button' tabindex='0' aria-label='查看月均成本明细'><div class='lbl'>月均成本</div><div class='val'>" + (monthCNY == null ? "—" : ("≈ ¥" + monthCNY.toFixed(2))) + "</div><div class='sub'>" + h(fxLabel) + " · " + costGroupsHTML(monthGroups) + "</div></article>" +
+        "<article class='fleet-finance' data-finance-detail role='button' tabindex='0' aria-label='查看月均成本明细'><div class='lbl'>月均成本</div><div class='val'>" + financeValue + "</div><div class='sub'>" + financeSub + "</div></article>" +
       "</section>"
     );
   }
@@ -1119,6 +1251,8 @@
     if (applyRegionFilter && regionFilter) {
       base = base.filter(function (item) { return regionDisplay(item.s).label === regionFilter; });
     }
+    if (nodeQuery) base = base.filter(function (item) { return serverMatchesQuery(item.s); });
+    if (anomalyFilter) base = base.filter(function (item) { return isAnomalous(item.s); });
     if (!applyInteractiveSort || !listSortKey || !listSortDir) return base;
     return base.map(function (item, idx) { return { item: item, idx: idx, value: listSortValue(item.s, listSortKey) }; }).sort(function (a, b) {
       let cmp = 0;
@@ -1135,9 +1269,14 @@
   }
 
   function listToolbar(r) {
+    const a = anomalySummary();
     return (
       '<div class="list-bar" id="views">' +
-        '<span class="list-bar-k">机器清单</span>' +
+        '<div class="list-bar-left">' +
+          '<span class="list-bar-k">机器清单</span>' +
+          '<button class="filter-pill' + (anomalyFilter ? ' is-on' : '') + '" data-anomaly-filter type="button">异常 <b data-anomaly-count>' + a.total + '</b></button>' +
+          '<label class="node-search"><span>筛选</span><input data-node-search type="search" value="' + attr(nodeQuery) + '" autocomplete="off" spellcheck="false" placeholder="VPS / 地区 / ASN / 回程"></label>' +
+        '</div>' +
         '<div class="views">' +
           '<button class="icon-btn' + (r.view === "list" ? " is-on" : "") + '" data-view="list" type="button" aria-label="横向排列" title="横向">' + iconList() + "</button>" +
           '<button class="icon-btn' + (r.view === "grid" ? " is-on" : "") + '" data-view="grid" type="button" aria-label="网格排列" title="网格">' + iconGrid() + "</button>" +
@@ -1163,7 +1302,7 @@
 
   function renderGrid(r) {
     const items = listedServers(false, true);
-    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + (items.length
+    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + anomalyNotice() + (items.length
       ? '<section class="board" aria-label="网格排列">' + items.map(function (item) {
         return card(item.s, item.i);
       }).join("") + "</section>"
@@ -1172,16 +1311,37 @@
 
   function renderColumn(r) {
     const items = listedServers(false, true);
-    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + '<section class="stack" aria-label="列排列">' + items.map(function (item) {
+    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + anomalyNotice() + (items.length ? '<section class="stack" aria-label="列排列">' + items.map(function (item) {
       return slab(item.s, item.i);
-    }).join("") + "</section>" + cycleBlock();
+    }).join("") + "</section>" : listEmpty()) + cycleBlock();
   }
 
   function renderList(r) {
     const items = listedServers(true, true);
-    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + '<section class="list" aria-label="横向排列">' + listHead() + items.map(function (item) {
+    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + anomalyNotice() + (items.length ? '<section class="list" aria-label="横向排列">' + listHead() + items.map(function (item) {
       return row(item.s, item.i);
-    }).join("") + "</section>" + cycleBlock();
+    }).join("") + "</section>" : listEmpty()) + cycleBlock();
+  }
+
+  function seriesGet(key) {
+    const value = seriesCache[key];
+    if (!value) return value;
+    const pos = seriesCacheOrder.indexOf(key);
+    if (pos >= 0) seriesCacheOrder.splice(pos, 1);
+    seriesCacheOrder.push(key);
+    return value;
+  }
+
+  function seriesPut(key, value) {
+    if (!value) return;
+    seriesCache[key] = value;
+    const pos = seriesCacheOrder.indexOf(key);
+    if (pos >= 0) seriesCacheOrder.splice(pos, 1);
+    seriesCacheOrder.push(key);
+    while (seriesCacheOrder.length > SERIES_CACHE_MAX) {
+      const old = seriesCacheOrder.shift();
+      delete seriesCache[old];
+    }
   }
 
   function nodeCtx(index) {
@@ -1190,7 +1350,7 @@
     if ((!targetKey || targetKey === "all") && s.ping && s.ping.length) targetKey = s.ping[0].key;
     const ping = (s.ping || []).find(function (p) { return p.key === targetKey; }) || (s.ping || [])[0] || null;
     const cacheKey = s.uuid + ":" + range + ":" + (targetKey || "all");
-    const cached = seriesCache[cacheKey];
+    const cached = seriesGet(cacheKey);
     let sparkVals = [];
     let multiSeries = [];
     if (cached) {
@@ -1210,7 +1370,7 @@
   function heroMultiSeries(ctx) {
     const s = ctx.s;
     const cacheKey = s.uuid + ":" + range + ":all";
-    const cached = seriesCache[cacheKey];
+    const cached = seriesGet(cacheKey);
     if (cached && cached.seriesByTask && cached.seriesByTask.length) return cached.seriesByTask;
     if (range === "1h") {
       return (s.ping || []).map(function (p) {
@@ -1279,13 +1439,16 @@
 
   function heroLine(s, ping) {
     const ms = ping && ping.current_ms != null ? Math.round(Number(ping.current_ms)) : null;
+    const presence = s.online
+      ? ("在线 " + fmtDays(s.uptime))
+      : (lastSeenText(s) ? ("最后在线 " + lastSeenText(s)) : "最后在线 —");
     return (
       '<header class="hero">' +
         "<div>" +
           '<div class="hero-sub">' +
             (s.online ? "在线" : "离线") + " · " + h(s.region_name || s.region_city || "") +
             (s.provider_name ? " · " + h(s.provider_name) : "") +
-            " · 在线 " + fmtDays(s.uptime) +
+            " · " + h(presence) +
           "</div>" +
         "</div>" +
         '<div class="hero-pulse">' +
@@ -1384,7 +1547,7 @@
     const key = latencyTargetKey || "all";
     const ping = key === "all" ? null : ((s.ping || []).find(function (p) { return p.key === key; }) || (s.ping || [])[0] || null);
     const cacheKey = s.uuid + ":" + range + ":" + key;
-    const cached = seriesCache[cacheKey];
+    const cached = seriesGet(cacheKey);
     let sparkVals = [];
     let multiSeries = [];
     if (cached) {
@@ -1444,17 +1607,20 @@
 
   function pageTraffic(ctx) {
     const s = ctx.s;
+    const forecast = trafficForecast(s);
+    const sourceLabel = s.traffic_source === 'metric_period' ? 'Metric Store · 当前账期' : s.traffic_source === 'record_period' ? '历史记录差分 · 当前账期' : '当前账期数据不可用';
     return (
       '<article class="page page-traffic">' +
-        '<div style="margin:0 0 16px">' + quotaBar(s) + "</div>" +
+        '<div style="margin:0 0 10px">' + quotaBar(s) + "</div>" +
+        '<div class="traffic-forecast' + (forecast && forecast.kind === 'bad' ? ' is-bad' : forecast && forecast.kind === 'good' ? ' is-good' : '') + '"><span>流量预测</span><b>' + h(forecast ? forecast.text : '暂无额度或历史数据') + '</b><small>' + h(sourceLabel) + '</small></div>' +
         '<section class="kpi">' +
           '<article><div class="lbl">已用</div><div class="val">' + fmtBytes(s.traffic_used, 1) + '</div><div class="sub">' + (s.traffic_limit ? ('限额 ' + fmtBytes(s.traffic_limit, 2)) : '无限额') + "</div></article>" +
-          '<article><div class="lbl">上行累计</div><div class="val">' + fmtBytes(s.traffic_used_up, 1) + '</div><div class="sub">Komari totalUp</div></article>' +
-          '<article><div class="lbl">下行累计</div><div class="val">' + fmtBytes(s.traffic_used_down, 1) + '</div><div class="sub">Komari totalDown</div></article>' +
+          '<article><div class="lbl">本账期上行</div><div class="val">' + fmtBytes(s.traffic_used_up, 1) + '</div><div class="sub">' + h(sourceLabel) + '</div></article>' +
+          '<article><div class="lbl">本账期下行</div><div class="val">' + fmtBytes(s.traffic_used_down, 1) + '</div><div class="sub">' + h(sourceLabel) + '</div></article>' +
           '<article><div class="lbl">最高日</div><div class="val">' + (ctx.last7.length ? fmtBytes(ctx.st.high, 1) : '—') + '</div><div class="sub">日均 ' + (ctx.last7.length ? fmtBytes(ctx.st.avg, 1) : '—') + "</div></article>" +
-          '<article><div class="lbl">账期提示</div><div class="val">' + h((s.period_start || '').slice(5) || '—') + '</div><div class="sub">至 ' + h((s.period_end || '').slice(5) || '—') + "</div></article>" +
+          '<article><div class="lbl">账期</div><div class="val">' + h((s.period_start || '').slice(5) || '—') + '</div><div class="sub">至 ' + h((s.period_end || '').slice(5) || '—') + "</div></article>" +
         "</section>" +
-        '<div class="chart-fill"><div class="panel-h"><h3>近 7 日流量</h3><span class="hero-sub">由 Komari network total 记录差分</span></div>' +
+        '<div class="chart-fill"><div class="panel-h"><h3>近 7 日流量</h3><span class="hero-sub">' + h(sourceLabel) + "</span></div>" +
           trafficHistoryHTML(ctx, 960, 220) +
         "</div>" +
         (ctx.last7.length ? '<section class="day-grid">' +
@@ -1585,8 +1751,10 @@
       const ll = serverLL(s, i) || [80, 30];
       const p = ortho(ll[0], ll[1]);
       if (!p) return;
-      const label = displayCountry(s) + " · " + s.name;
-      items.push({ i: i, key: s.uuid || String(i), s: s, px: p.x, py: p.y, label: label, w: labelWidth(label) });
+      const loc = displayCountry(s);
+      const leftLabel = (s.name || "未命名") + " · " + loc;
+      const rightLabel = loc + " · " + (s.name || "未命名");
+      items.push({ i: i, key: s.uuid || String(i), s: s, px: p.x, py: p.y, leftLabel: leftLabel, rightLabel: rightLabel, w: Math.max(labelWidth(leftLabel), labelWidth(rightLabel)) });
     });
 
     const buckets = {};
@@ -1673,14 +1841,22 @@
     return best;
   }
 
-  function landPathData(ortho) {
-    const rings = WORLD_OUTLINES || [];
+  function landPathData(ortho, profile) {
+    const cfg = profile || globeProfile();
+    const rings = cfg.land === "coarse" ? COARSE_WORLD_OUTLINES : (WORLD_OUTLINES || []);
+    const stride = Math.max(1, Number(cfg.coastStride) || 1);
     let fill = "";
     let stroke = "";
     for (let r = 0; r < rings.length; r += 1) {
-      const ring = rings[r];
+      const raw = rings[r];
+      if (!raw || raw.length < 3) continue;
+      let ring = raw;
+      if (stride > 1 && raw.length > 18) {
+        ring = [];
+        for (let z = 0; z < raw.length; z += stride) ring.push(raw[z]);
+        if (ring.length < 3) ring = raw;
+      }
       const n = ring.length;
-      if (n < 3) continue;
       const vis = new Array(n);
       for (let i = 0; i < n; i += 1) vis[i] = ortho(ring[i][0], ring[i][1]);
       let d = "";
@@ -1708,6 +1884,7 @@
   }
 
   function globeMarkup() {
+    const cfg = globeProfile();
     const cx = 230;
     const cy = 112;
     const R = 92;
@@ -1743,34 +1920,37 @@
       "</radialGradient></defs>" +
       '<circle class="globe-ocean" cx="' + cx + '" cy="' + cy + '" r="' + R + '" />' +
       '<circle class="globe-disk" cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="url(#globe-shade)" stroke="var(--ink)" stroke-width="1.05"/>';
-    const land = landPathData(ortho);
+    const land = landPathData(ortho, cfg);
     if (land.fill) {
       wire += '<path class="globe-land" d="' + land.fill + '" />';
       wire += '<path class="globe-coast" d="' + land.stroke + '" fill="none" />';
     }
-    for (let lon = -180; lon < 180; lon += 30) wire += curve(lon, null, -80, 80, 4);
-    for (let lat = -60; lat <= 60; lat += 30) wire += curve(null, lat, -180, 180, 4);
-    wire += curve(null, 0, -180, 180, 3).replace('stroke-width="0.9"', 'stroke-width="1.15"');
-    const sweepLon = ((Date.now() / 28) % 360) - 180;
-    const sweepBase = currentTheme() === "light" ? 0.52 : 0.42;
-    for (let k = 0; k < 6; k += 1) {
-      const lon = sweepLon - k * 8;
-      const sweep = curve(lon, null, -80, 80, 3);
-      if (sweep) {
-        wire += sweep
-          .replace('class="globe-wire"', 'class="globe-sweep"')
-          .replace('stroke-width="0.9"', 'stroke-width="' + (k === 0 ? 1.6 : 1.1) + '" style="stroke-opacity:' + (sweepBase - k * 0.06).toFixed(2) + '"');
+    for (let lon = -180; lon < 180; lon += cfg.gridLon) wire += curve(lon, null, -80, 80, cfg.curveStep);
+    for (let lat = -60; lat <= 60; lat += cfg.gridLat) wire += curve(null, lat, -180, 180, cfg.curveStep);
+    wire += curve(null, 0, -180, 180, Math.max(3, cfg.curveStep - 1)).replace('stroke-width="0.9"', 'stroke-width="1.15"');
+    if (cfg.sweepCount > 0) {
+      const sweepLon = ((Date.now() / 28) % 360) - 180;
+      const sweepBase = currentTheme() === "light" ? 0.52 : 0.42;
+      for (let k = 0; k < cfg.sweepCount; k += 1) {
+        const lon = sweepLon - k * 8;
+        const sweep = curve(lon, null, -80, 80, Math.max(3, cfg.curveStep - 1));
+        if (sweep) {
+          wire += sweep
+            .replace('class="globe-wire"', 'class="globe-sweep"')
+            .replace('stroke-width="0.9"', 'stroke-width="' + (k === 0 ? 1.6 : 1.1) + '" style="stroke-opacity:' + (sweepBase - k * 0.06).toFixed(2) + '"');
+        }
       }
     }
     wire += '<line class="globe-base" x1="110" y1="' + (cy + R + 16) + '" x2="350" y2="' + (cy + R + 16) + '" stroke-width="1"/>';
     const laid = layoutGlobeLabels(cx, ortho);
     let links = "";
     const online = laid.filter(function (n) { return n.s.online; });
-    online.forEach(function (a, i) {
+    if (cfg.linkMode > 0) online.forEach(function (a, i) {
       online.forEach(function (b, j) {
         if (j <= i) return;
         if ((a.s.geo_country || a.s.region_country || "") === (b.s.geo_country || b.s.region_country || "")) return;
-        if ((a.i * 7 + b.i * 3) % 4 !== 1) return;
+        const divisor = cfg.linkMode > 1 ? 4 : 8;
+        if ((a.i * 7 + b.i * 3) % divisor !== 1) return;
         const mx = (a.px + b.px) / 2;
         const my = (a.py + b.py) / 2;
         const qx = cx + (mx - cx) * 0.42;
@@ -1780,17 +1960,18 @@
     });
     const pins = laid.map(function (n) {
       const tx = n.end ? n.lx - 3 : n.lx + 3;
+      const label = n.end ? n.leftLabel : n.rightLabel;
       return (
         '<g class="globe-node">' +
           '<path d="M ' + n.px.toFixed(1) + " " + n.py.toFixed(1) + " L " + n.lx.toFixed(1) + " " + n.ly.toFixed(1) + '" fill="none" stroke="var(--ink)" stroke-width="0.75"/>' +
           '<circle cx="' + n.px.toFixed(1) + '" cy="' + n.py.toFixed(1) + '" r="2.1" fill="none" stroke="' + pingColor(n.s) + '" stroke-width="1.15"/>' +
-          '<text x="' + tx.toFixed(1) + '" y="' + (n.ly + 3).toFixed(1) + '" text-anchor="' + (n.end ? "end" : "start") + '" fill="var(--ink-soft)" font-size="8.5" font-family="IBM Plex Mono, monospace" stroke="var(--void)" stroke-width="3" paint-order="stroke" stroke-linejoin="round">' + h(n.label) + "</text>" +
+          '<text x="' + tx.toFixed(1) + '" y="' + (n.ly + 3).toFixed(1) + '" text-anchor="' + (n.end ? "end" : "start") + '" fill="var(--ink-soft)" font-size="8.5" font-family="IBM Plex Mono, monospace" stroke="var(--void)" stroke-width="3" paint-order="stroke" stroke-linejoin="round">' + h(label) + "</text>" +
           '<circle class="hit" cx="' + n.px.toFixed(1) + '" cy="' + n.py.toFixed(1) + '" r="9" fill="transparent" data-index="' + attr(n.key) + '"/>' +
         "</g>"
       );
     }).join("");
     return wire + links + pins +
-      '<text class="globe-caption" x="230" y="' + (cy + R + 28) + '" text-anchor="middle" font-size="8" font-family="IBM Plex Mono, monospace" letter-spacing="1.4">' + globeCaption() + "</text>";
+      '<text class="globe-caption" x="230" y="' + (cy + R + 28) + '" text-anchor="middle" font-size="8" font-family="IBM Plex Mono, monospace" letter-spacing="1.4">' + globeCaption() + " · " + cfg.key.toUpperCase() + "</text>";
   }
 
   function globePanel() {
@@ -1824,6 +2005,14 @@
     if (svg) svg.innerHTML = globeMarkup();
   }
 
+  function queueGlobePaint() {
+    if (globePaintRAF) return;
+    globePaintRAF = requestAnimationFrame(function () {
+      globePaintRAF = 0;
+      paintGlobe();
+    });
+  }
+
   function onGlobeDown(ev) {
     const atlas = ev.target.closest(".atlas");
     if (!atlas || ev.button) return;
@@ -1848,7 +2037,7 @@
     ev.preventDefault();
     globeLon = wrapLon(globeDrag.lon - dx * 0.48);
     globeLat = Math.max(-78, Math.min(78, globeDrag.lat + dy * 0.36));
-    paintGlobe();
+    queueGlobePaint();
   }
 
   function onGlobeUp(ev) {
@@ -1860,6 +2049,7 @@
     }
     if (globeDrag.moved) globeSkipClick = true;
     globeDrag = null;
+    queueGlobePaint();
   }
 
   function hideWindow() {
@@ -1884,7 +2074,7 @@
     const lossValues = chosen ? (chosen.loss_pct == null ? [] : [Number(chosen.loss_pct)]) : targets.map(function (p) { return p.loss_pct == null ? null : Number(p.loss_pct); }).filter(Number.isFinite);
     const avgLoss = lossValues.length ? lossValues.reduce(function (a, b) { return a + b; }, 0) / lossValues.length : null;
     const cacheKey = s.uuid + ":" + range + ":" + (netTarget || "all");
-    const cached = seriesCache[cacheKey] || null;
+    const cached = seriesGet(cacheKey) || null;
     let chart = '';
     if (netTarget === 'all' && cached && cached.seriesByTask && cached.seriesByTask.length > 1) {
       chart = ProbeCharts.multiSpark(cached.seriesByTask, { w: 960, h: 200 });
@@ -1947,8 +2137,9 @@
     const last7 = Object.keys(byDate).sort().slice(-7).map(function (key) { return byDate[key]; });
     const monthGroups = costGroups(servers, false);
     const annualGroups = costGroups(servers, true);
-    const monthCNY = aggregateCNY(servers, false);
-    const annualCNY = aggregateCNY(servers, true);
+    const canSeeFinance = !!accessState.logged_in;
+    const monthCNY = canSeeFinance ? aggregateCNY(servers, false) : null;
+    const annualCNY = canSeeFinance ? aggregateCNY(servers, true) : null;
     const fxLabel = state._fx_source ? (state._fx_source === 'cache' ? '汇率缓存' : state._fx_source === 'stale-cache' ? '旧汇率缓存' : state._fx_source === 'default' ? '备用汇率' : state._fx_source) : '汇率加载中';
     const ranked = servers.filter(function (s) { return Number(s.traffic_limit || 0) > 0 && s.traffic_used != null; }).slice().sort(function (a, b) {
       return pct(b.traffic_used, b.traffic_limit) - pct(a.traffic_used, a.traffic_limit);
@@ -1959,8 +2150,8 @@
     const on = function (key) { return !liveMode || state[key] !== false; };
     let body = '<section class="subpage"><p class="lead">' + t.online + "/" + t.all + " 台在线。费用按 Komari 原生 price / billing_cycle 折算；汇率使用每日缓存的公开 CNY 基准数据，并保留原币种明细。</p>";
     body += '<section class="kpi">' +
-      "<article><div class='lbl'>月均成本</div><div class='val cost-value'>" + (monthCNY == null ? '—' : ('≈ ¥' + monthCNY.toFixed(2))) + "</div><div class='sub'>" + h(fxLabel) + " · 原币种 " + costGroupsHTML(monthGroups) + "</div></article>" +
-      "<article><div class='lbl'>年化预算</div><div class='val cost-value'>" + (annualCNY == null ? '—' : ('≈ ¥' + annualCNY.toFixed(2))) + "</div><div class='sub'>按 365.25 天 · 原币种 " + costGroupsHTML(annualGroups) + "</div></article>" +
+      "<article><div class='lbl'>月均成本</div><div class='val cost-value'>" + (!accessState.known ? '…' : !canSeeFinance ? '*' : monthCNY == null ? '—' : ('≈ ¥' + monthCNY.toFixed(2))) + "</div><div class='sub'>" + (!accessState.known ? '正在确认权限' : !canSeeFinance ? '登录后可见' : (h(fxLabel) + " · 原币种 " + costGroupsHTML(monthGroups))) + "</div></article>" +
+      "<article><div class='lbl'>年化预算</div><div class='val cost-value'>" + (!accessState.known ? '…' : !canSeeFinance ? '*' : annualCNY == null ? '—' : ('≈ ¥' + annualCNY.toFixed(2))) + "</div><div class='sub'>" + (!accessState.known ? '正在确认权限' : !canSeeFinance ? '登录后可见' : ('按 365.25 天 · 原币种 ' + costGroupsHTML(annualGroups))) + "</div></article>" +
       "<article><div class='lbl'>流量累计</div><div class='val'>" + fmtBytes(t.used, 1) + "</div><div class='sub'>限额 " + fmtBytes(t.limit, 2) + "</div></article>" +
       "<article><div class='lbl'>有限额</div><div class='val'>" + servers.filter(function (s) { return s.traffic_limit; }).length + "</div><div class='sub'>台服务器</div></article></section>";
     if (on("show_traffic_7d") || on("show_traffic_quota")) {
@@ -1993,7 +2184,7 @@
       body += '<div class="panel" style="margin-top:16px"><div class="panel-h"><h3>续费与到期</h3><span class="hero-sub">按到期日</span></div><div class="timeline">' +
         (soon.length ? soon.map(function (s) {
           const days = Math.max(0, Math.round((new Date(s.expires_at_raw) - new Date()) / 86400000));
-          return "<article><div>" + h(s.expires_at || "—") + "</div><b>" + h(s.name) + "</b>" + days + " 天后　" + h(renewalText(s)) + "</article>";
+          return "<article><div>" + h(s.expires_at || "—") + "</div><b>" + h(s.name) + "</b>" + days + " 天后　" + h(canSeeFinance ? renewalText(s) : "*") + "</article>";
         }).join("") : '<div class="hero-sub">暂无可用的到期日期</div>') + "</div></div>";
     }
     main.innerHTML = body + "</section>" + cycleBlock();
@@ -2090,6 +2281,20 @@
       }
       return;
     }
+    const anomalyBtn = ev.target.closest("[data-anomaly-filter]");
+    if (anomalyBtn) {
+      anomalyFilter = !anomalyFilter;
+      render();
+      return;
+    }
+    const clearFilters = ev.target.closest("[data-clear-filters]");
+    if (clearFilters) {
+      anomalyFilter = false;
+      nodeQuery = "";
+      regionFilter = "";
+      render();
+      return;
+    }
     const financeBtn = ev.target.closest("[data-finance-detail]");
     if (financeBtn) {
       openFinanceDetail();
@@ -2137,6 +2342,24 @@
     const item = ev.target.closest("[data-index]");
     if (!item) return;
     openNode(item.getAttribute("data-index"));
+  }
+
+  let searchRenderTimer = 0;
+  function onMainInput(ev) {
+    const input = ev.target.closest && ev.target.closest('[data-node-search]');
+    if (!input) return;
+    nodeQuery = input.value || '';
+    clearTimeout(searchRenderTimer);
+    const caret = input.selectionStart == null ? nodeQuery.length : input.selectionStart;
+    searchRenderTimer = setTimeout(function () {
+      render();
+      requestAnimationFrame(function () {
+        const next = main.querySelector('[data-node-search]');
+        if (!next) return;
+        next.focus({ preventScroll: true });
+        try { next.setSelectionRange(caret, caret); } catch (e) {}
+      });
+    }, 60);
   }
 
   function onWindowClick(ev) {
@@ -2315,6 +2538,7 @@
   overlay.addEventListener("click", onWindowClick);
   overlay.addEventListener("change", onWindowChange);
   main.addEventListener("click", onMainClick);
+  main.addEventListener("input", onMainInput);
   main.addEventListener("pointerdown", onGlobeDown);
   main.addEventListener("pointermove", onGlobeMove);
   main.addEventListener("pointerup", onGlobeUp);
@@ -2323,12 +2547,12 @@
     if (!ev.target.closest(".atlas")) return;
     globeLon = 80;
     globeLat = 30;
-    paintGlobe();
+    queueGlobePaint();
   });
   window.addEventListener("hashchange", render);
   window.addEventListener("keydown", onKey);
   document.addEventListener("mmwx-fx", function () {
-    if (main.querySelector(".atlas svg")) paintGlobe();
+    if (main.querySelector(".atlas svg")) queueGlobePaint();
   });
 
   function rebuildPulse() {
@@ -2345,8 +2569,10 @@
         }
       });
     });
-    const first = servers[0];
-    const start = first && first.period_start ? new Date(first.period_start + "T00:00:00") : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    // Month pulse is a calendar-month visualization. Per-node billing reset days
+    // only affect traffic-period quota accounting, never the calendar axis here.
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
     const rows = [];
     let acc = 0;
@@ -2367,6 +2593,32 @@
     pulse = rows.length ? rows : ProbeDemo.monthPulse(servers);
   }
 
+  function nodeMarkup(view, item) {
+    if (view === 'column') return slab(item.s, item.i);
+    if (view === 'grid') return card(item.s, item.i);
+    return row(item.s, item.i);
+  }
+
+  function patchNodeCollection(view, items) {
+    const host = main.querySelector(view === 'column' ? '.stack' : view === 'grid' ? '.board' : '.list');
+    if (!host) return false;
+    const existing = Array.prototype.filter.call(host.children, function (el) { return el && el.hasAttribute && el.hasAttribute('data-index'); });
+    const current = existing.map(function (el) { return el.getAttribute('data-index'); }).join('|');
+    const expected = items.map(function (item) { return String(item.i); }).join('|');
+    if (current !== expected) {
+      host.innerHTML = (view === 'list' ? listHead() : '') + items.map(function (item) { return nodeMarkup(view, item); }).join('');
+      return true;
+    }
+    existing.forEach(function (el, idx) {
+      const item = items[idx];
+      if (!item) return;
+      const sig = liveSignature(item.s);
+      if (el.getAttribute('data-live-sig') === sig) return;
+      el.outerHTML = nodeMarkup(view, item);
+    });
+    return true;
+  }
+
   function patchLiveUI() {
     const r = route();
     renderFoot();
@@ -2374,16 +2626,13 @@
       const fleet = main.querySelector(".fleet");
       if (fleet) fleet.outerHTML = fleetStrip();
       const items = listedServers(r.view === "list", true);
-      if (r.view === "column") {
-        const stack = main.querySelector(".stack");
-        if (stack) stack.innerHTML = items.map(function (item) { return slab(item.s, item.i); }).join("");
-      } else if (r.view === "list") {
-        const list = main.querySelector(".list");
-        if (list) list.innerHTML = listHead() + items.map(function (item) { return row(item.s, item.i); }).join("");
-      } else {
-        const board = main.querySelector(".board");
-        if (board) board.innerHTML = items.map(function (item) { return card(item.s, item.i); }).join("");
-      }
+      if (!patchNodeCollection(r.view || 'list', items)) renderBoard(r);
+      const count = main.querySelector('[data-anomaly-count]');
+      if (count) count.textContent = String(anomalySummary().total);
+      const notice = main.querySelector('.filter-notice');
+      if (notice && (anomalyFilter || nodeQuery)) notice.outerHTML = anomalyNotice();
+      globeLiveTick += 1;
+      if (showGlobe && globeLiveTick % 6 === 0 && main.querySelector('.atlas svg')) queueGlobePaint();
     } else {
       subpageLiveTick += 1;
       if (subpageLiveTick % 3 === 0) renderBoard(r);
@@ -2400,6 +2649,7 @@
       return;
     }
     state = payload;
+    globeQuality = normalizeGlobeQuality(state.globe_quality || "medium");
     state._loading = false;
     state._error = "";
     liveMode = true;
@@ -2427,7 +2677,7 @@
     const t = tgt !== undefined ? tgt : (targetKey || "all");
     const key = String(index) + ":" + range + ":" + (t || "all");
     return ProbeAPI.fetchSeries(index, range, t || "all").then(function (payload) {
-      if (payload) seriesCache[key] = payload;
+      if (payload) seriesPut(key, payload);
       return payload;
     }).catch(function () { return null; });
   }
@@ -2513,15 +2763,20 @@
     let last = 0;
     function frame(t) {
       requestAnimationFrame(frame);
-      if (t - last < 70) return;
+      const cfg = globeProfile();
+      if (last && t - last < cfg.idleMs) return;
+      const dt = last ? Math.min(1000, t - last) : cfg.idleMs;
       last = t;
       if (!showGlobe || globeDrag || document.hidden) return;
       if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       if (route().home !== "nodes") return;
       if (overlay && !overlay.hidden) return;
-      if (!main.querySelector(".atlas svg")) return;
-      globeLon = wrapLon(globeLon + 0.18);
-      paintGlobe();
+      const atlas = main.querySelector(".atlas");
+      if (!atlas || !atlas.querySelector('svg')) return;
+      const rect = atlas.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+      globeLon = wrapLon(globeLon + dt * 0.00255);
+      queueGlobePaint();
     }
     requestAnimationFrame(frame);
   })();
@@ -2537,14 +2792,15 @@
       const accessUuid = payload.servers && payload.servers[0] && payload.servers[0].uuid;
       ProbeAPI.fetchAccess(accessUuid).then(function (nextAccess) {
         accessState = nextAccess || accessState;
-        const r = route();
-        if (r.node != null) renderWindow(r.node, r.page);
+        const y = window.scrollY;
+        render();
+        window.scrollTo(0, y);
       }).catch(function () {});
       ProbeAPI.connectWS(applyLive);
       if (ProbeAPI.enrich) ProbeAPI.enrich(payload).then(function (next) { if (next) applyLive(next, { kind: 'enrichment' }); }).catch(function () {});
       Promise.allSettled([
         ProbeAPI.fetchPingOverview().then(function (next) { if (next) applyLive(next); }),
-        ProbeAPI.fetchTrafficHistory(168).then(function (next) { if (next) applyLive(next); }),
+        ProbeAPI.fetchTrafficHistory().then(function (next) { if (next) applyLive(next); }),
       ]);
     }).catch(function (err) {
       state = { enabled: true, title: "节点状态", servers: [], _loading: false, _error: err && err.message ? err.message : String(err), _source: "komari-rpc2" };

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Komari Monitor</title>
   <meta name="description" content="A simple server monitor tool.">
+  <meta name="line-grid-version" content="0.4.2">
   <script>
     (function () {
       var t = localStorage.getItem("mmwx-theme") === "light" ? "light" : "dark";
@@ -20,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-  <style>
+  <style data-inline-source="dist/css/app.css">
 :root {
   --globe-rim: rgba(8, 8, 8, 0.36);
   --globe-tint: 0.15;
@@ -2678,6 +2679,173 @@ body.modal-open { overflow: hidden; }
 /* v0.3.15 upstream texture parity */
 .fx-grain { transition: opacity 1.35s cubic-bezier(0.45, 0.05, 0.15, 1); }
 .scope-v { shape-rendering: crispEdges; }
+
+/* v0.4.0 — architecture/stability pass: search, anomaly filter, last-seen and traffic forecast */
+.status {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1.15;
+}
+.status.is-compact { align-items: flex-end; }
+.status small {
+  display: block;
+  max-width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.row > .status.is-offline small { color: color-mix(in srgb, var(--ink-dim) 78%, var(--down) 22%); }
+.slab-region {
+  color: var(--ink-dim);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list-bar-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.filter-pill {
+  appearance: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  padding: 4px 1px 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-pill b { color: inherit; font-weight: 500; }
+.filter-pill:hover,
+.filter-pill:focus-visible,
+.filter-pill.is-on {
+  color: var(--ink);
+  border-bottom-color: var(--gold);
+  outline: none;
+}
+.filter-pill.is-on b { color: var(--down); }
+
+.node-search {
+  flex: 0 1 320px;
+  min-width: 150px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-dim);
+}
+.node-search > span {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+}
+.node-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: 11px/1.4 var(--sans);
+  padding: 4px 0 5px;
+}
+.node-search input::placeholder { color: var(--ink-faint); }
+.node-search:focus-within { border-bottom-color: var(--line-strong); color: var(--ink-soft); }
+
+.filter-notice {
+  min-height: 34px;
+  margin: -2px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .03em;
+}
+.filter-notice button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-notice button:hover,
+.filter-notice button:focus-visible { color: var(--ink); outline: none; }
+
+.traffic-forecast {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  color: var(--ink-dim);
+  font-size: 11px;
+}
+.traffic-forecast > span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.traffic-forecast b { color: var(--ink-soft); font-weight: 500; }
+.traffic-forecast small { color: var(--ink-dim); font-size: 10px; }
+.traffic-forecast.is-good b { color: var(--live); }
+.traffic-forecast.is-bad b { color: var(--down); }
+
+/* Preserve line-grid density even with the extra status metadata. */
+.row > .status { min-width: 0; }
+.row > .status small { max-width: 48px; font-size: 7.5px; }
+
+@media (max-width: 1100px) {
+  .node-search { flex: 1 1 220px; }
+  .row > .status small { max-width: 96px; }
+}
+
+@media (max-width: 720px) {
+  .list-bar { align-items: flex-start; gap: 8px; }
+  .list-bar-left { flex-wrap: wrap; gap: 8px 12px; }
+  .list-bar-k { padding-top: 4px; }
+  .filter-pill { font-size: 9px; }
+  .node-search {
+    order: 3;
+    flex: 1 0 100%;
+    width: 100%;
+    max-width: none;
+  }
+  .node-search input { font-size: 10px; }
+  .filter-notice { font-size: 8px; align-items: flex-start; }
+  .status small { font-size: 7px; max-width: 66px; }
+  .traffic-forecast {
+    grid-template-columns: auto 1fr;
+    gap: 5px 8px;
+    padding: 7px 8px;
+    font-size: 9px;
+  }
+  .traffic-forecast small { grid-column: 1 / -1; font-size: 8px; }
+}
+
 </style>
 </head>
 <body>
@@ -2736,8 +2904,8 @@ body.modal-open { overflow: hidden; }
     </section>
   </div>
   <div id="chart-tip" hidden></div>
-  <script>window.LINE_GRID_METADATA={"global":{"show_globe":true,"traffic_reset_day":1},"nodes":{}};</script>
-  <script>
+  <script data-inline-source="dist/metadata/nodes.json">window.LINE_GRID_METADATA={"global":{"show_globe":true,"traffic_reset_day":1},"nodes":{}};</script>
+  <script data-inline-source="dist/js/fx.js">
 (function (global) {
   const KEY = "mmwx-fx";
   const DEFAULTS = {
@@ -2872,14 +3040,16 @@ body.modal-open { overflow: hidden; }
     flags: flags,
   };
 })(window);
+
 </script>
-  <script>
+  <script data-inline-source="dist/js/config.js">
 /* Komari Line Grid uses the current site by default. Set apiBase only for same-origin-compatible development/testing. */
 window.ProbeConfig = {
   apiBase: ""
 };
+
 </script>
-  <script>
+  <script data-inline-source="dist/js/data.js">
 /* 演示快照：字段与妙妙屋X /api/public/probe-servers 对齐，便于以后换真接口。 */
 (function (global) {
   const KB = 1024;
@@ -2954,6 +3124,7 @@ window.ProbeConfig = {
     block_login: false,
     show_name: true,
     show_globe: false,
+    globe_quality: "medium",
     license_badge: { name: "mmwx", display_name: "妙妙屋X" },
     servers: [
       {
@@ -3346,8 +3517,9 @@ window.ProbeConfig = {
     monthPulse: monthPulse,
   };
 })(window);
+
 </script>
-  <script>
+  <script data-inline-source="dist/js/enrich.js">
 (function (global) {
   'use strict';
 
@@ -3608,8 +3780,9 @@ window.ProbeConfig = {
     defaultRates: FX_DEFAULT,
   };
 })(window);
+
 </script>
-  <script>
+  <script data-inline-source="dist/js/komari.js">
 (function (global) {
   'use strict';
 
@@ -3853,6 +4026,7 @@ window.ProbeConfig = {
     const country = flagToIso(ext.region_country || node.region || node.country || node.iso || '');
     const totalUp = hasLive ? firstNumber(live, ['net_total_out', 'net_total_up', 'network.totalUp', 'net.totalUp']) : null;
     const totalDown = hasLive ? firstNumber(live, ['net_total_in', 'net_total_down', 'network.totalDown', 'net.totalDown']) : null;
+    const liveSeenAt = hasLive ? parseTime(firstValue(live, ['time', 'updated_at', 'timestamp', 'created_at'])) : null;
     const trafficType = String(node.traffic_limit_type || 'sum');
     const expiry = normalizeExpiry(node.expired_at);
     const price = numberOrNull(node.price);
@@ -3875,6 +4049,7 @@ window.ProbeConfig = {
       name: String(node.name || node.Name || '未命名'),
       online: hasLive ? live.online === true : false,
       has_live: hasLive,
+      last_seen_at: liveSeenAt != null ? liveSeenAt : (hasLive && live.online === true ? Date.now() : null),
       region_country: country,
       geo_country: country,
       region_name: String(ext.region_name || node.group || node.region || country || ''),
@@ -3901,12 +4076,21 @@ window.ProbeConfig = {
       connections_tcp: hasLive ? firstNumber(live, ['connections']) : null,
       connections_udp: hasLive ? firstNumber(live, ['connections_udp']) : null,
 
-      traffic_used_up: totalUp,
-      traffic_used_down: totalDown,
-      traffic_used: calcTraffic(totalUp, totalDown, trafficType),
+      // Live net_total counters are lifetime/session counters, not a billing-period total.
+      // Keep them separate so the UI never silently treats lifetime traffic as the current cycle.
+      traffic_lifetime_up: totalUp,
+      traffic_lifetime_down: totalDown,
+      traffic_lifetime: calcTraffic(totalUp, totalDown, trafficType),
+      traffic_period_up: null,
+      traffic_period_down: null,
+      traffic_period: null,
+      traffic_used_up: null,
+      traffic_used_down: null,
+      traffic_used: null,
       traffic_limit: numberOr(node.traffic_limit, 0),
       traffic_limit_type: trafficType,
-      traffic_source: totalUp != null || totalDown != null ? 'live_total' : null,
+      traffic_source: null,
+      traffic_period_complete: false,
       traffic_history_status: 'loading',
       traffic_history_days: 0,
       daily_traffic: [],
@@ -3978,6 +4162,7 @@ window.ProbeConfig = {
       title: String(metaGlobal.title || pub.sitename || pub.site_name || pub.name || '节点状态'),
       appearance: { theme: 'line-grid', color_mode: 'dark' },
       show_globe: metaGlobal.show_globe !== false && settings.showGlobe !== false,
+      globe_quality: (function () { const q = String(metaGlobal.globe_quality || settings.globeQuality || 'Medium').toLowerCase(); return q === 'low' || q === 'high' ? q : 'medium'; })(),
       offline_server_position: String(metaGlobal.offline_server_position || settings.offlineServerPosition || 'Last'),
       enable_ip_geo_asn: [true, 1, '1', 'true', 'on'].indexOf(metaGlobal.enable_ip_geo_asn) >= 0 || [true, 1, '1', 'true', 'on'].indexOf(settings.enableIpGeoAsn) >= 0,
       servers: servers,
@@ -3992,6 +4177,11 @@ window.ProbeConfig = {
     const hasLive = !!(live && typeof live === 'object');
     server.has_live = hasLive;
     server.online = hasLive ? live.online === true : false;
+    if (hasLive) {
+      const seen = parseTime(firstValue(live, ['time', 'updated_at', 'timestamp', 'created_at']));
+      if (seen != null) server.last_seen_at = seen;
+      else if (live.online === true) server.last_seen_at = Date.now();
+    }
     if (!hasLive) {
       server.cpu_pct = null;
       server.mem_used = null;
@@ -4020,10 +4210,9 @@ window.ProbeConfig = {
     const up = firstNumber(live, ['net_total_out', 'net_total_up', 'network.totalUp', 'net.totalUp']);
     const down = firstNumber(live, ['net_total_in', 'net_total_down', 'network.totalDown', 'net.totalDown']);
     if (up != null || down != null) {
-      server.traffic_used_up = up;
-      server.traffic_used_down = down;
-      server.traffic_used = calcTraffic(up, down, server.traffic_limit_type);
-      server.traffic_source = 'live_total';
+      server.traffic_lifetime_up = up;
+      server.traffic_lifetime_down = down;
+      server.traffic_lifetime = calcTraffic(up, down, server.traffic_limit_type);
     }
     server.ping = mapLivePing(live.ping, server.ping);
   }
@@ -4162,6 +4351,33 @@ window.ProbeConfig = {
     });
   }
 
+  function applyPeriodTraffic(server, daily, source) {
+    const start = server && server.period_start ? new Date(server.period_start + 'T00:00:00').getTime() : NaN;
+    const end = server && server.period_end ? new Date(server.period_end + 'T00:00:00').getTime() : NaN;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || !Array.isArray(daily) || !daily.length) return false;
+    const rows = daily.filter(function (row) {
+      const t = new Date(String(row.date || '') + 'T00:00:00').getTime();
+      return Number.isFinite(t) && t >= start && t < end;
+    });
+    if (!rows.length) return false;
+    const up = rows.reduce(function (n, d) { return n + numberOr(d.uplink, 0); }, 0);
+    const down = rows.reduce(function (n, d) { return n + numberOr(d.downlink, 0); }, 0);
+    server.traffic_period_up = up;
+    server.traffic_period_down = down;
+    server.traffic_period = calcTraffic(up, down, server.traffic_limit_type);
+    // Compatibility alias used by the existing UI. In v0.4 this always means current billing period.
+    server.traffic_used_up = up;
+    server.traffic_used_down = down;
+    server.traffic_used = server.traffic_period;
+    server.traffic_source = source;
+    const earliest = rows.reduce(function (min, row) {
+      const t = new Date(String(row.date || '') + 'T00:00:00').getTime();
+      return Number.isFinite(t) ? Math.min(min, t) : min;
+    }, Infinity);
+    server.traffic_period_complete = Number.isFinite(earliest) && earliest <= start + DAY * 1000;
+    return true;
+  }
+
   function mergeTrafficHistory(payload, raw, days) {
     if (!payload || !Array.isArray(payload.servers)) return payload;
     let any = false;
@@ -4171,14 +4387,9 @@ window.ProbeConfig = {
       server.daily_traffic = daily.slice(-Math.max(7, days || 7));
       server.traffic_history_days = daily.length;
       server.traffic_history_status = daily.length ? 'ok' : 'unavailable';
-      if (daily.length) any = true;
-      if (server.traffic_used == null && daily.length) {
-        const up = daily.reduce(function (n, d) { return n + d.uplink; }, 0);
-        const down = daily.reduce(function (n, d) { return n + d.downlink; }, 0);
-        server.traffic_used_up = up;
-        server.traffic_used_down = down;
-        server.traffic_used = calcTraffic(up, down, server.traffic_limit_type);
-        server.traffic_source = 'history_delta';
+      if (daily.length) {
+        any = true;
+        if (server.traffic_source !== 'metric_period') applyPeriodTraffic(server, daily, 'record_period');
       }
     });
     payload._traffic_history_status = any ? 'ok' : 'unavailable';
@@ -4225,25 +4436,18 @@ window.ProbeConfig = {
       }).filter(function (row) { return new Date(row.date + 'T00:00:00').getTime() >= cutoff.getTime(); });
       if (!daily.length) return;
       any = true;
-      if (!server.daily_traffic || daily.length > server.daily_traffic.length) {
-        server.daily_traffic = daily.slice(-Math.max(7, days || 7));
-        server.traffic_history_days = daily.length;
-        server.traffic_history_status = 'ok';
-        server.traffic_history_source = 'metric';
-      }
+      // Metric Store is the preferred source. Replace the fallback even when
+      // both contain the same number of days so billing totals stay deterministic.
+      server.daily_traffic = daily.slice(-Math.max(7, days || 7));
+      server.traffic_history_days = daily.length;
+      server.traffic_history_status = 'ok';
+      server.traffic_history_source = 'metric';
+      applyPeriodTraffic(server, daily, 'metric_period');
       const retention = Math.max(
         numberOr(pack['traffic.up'] && pack['traffic.up'].retention_days, 0),
         numberOr(pack['traffic.down'] && pack['traffic.down'].retention_days, 0)
       );
       if (retention) server.traffic_retention_days = retention;
-      if (server.traffic_used == null) {
-        const up = daily.reduce(function (n, d) { return n + d.uplink; }, 0);
-        const down = daily.reduce(function (n, d) { return n + d.downlink; }, 0);
-        server.traffic_used_up = up;
-        server.traffic_used_down = down;
-        server.traffic_used = calcTraffic(up, down, server.traffic_limit_type);
-        server.traffic_source = 'metric_delta';
-      }
     });
     if (any) payload._traffic_history_status = 'ok';
     return payload;
@@ -4293,8 +4497,9 @@ window.ProbeConfig = {
     buildDailyTraffic: buildDailyTraffic,
   };
 })(window);
+
 </script>
-  <script>
+  <script data-inline-source="dist/js/api.js">
 (function (global) {
   'use strict';
 
@@ -4376,39 +4581,54 @@ window.ProbeConfig = {
 
   function fetchTrafficHistory(hours) {
     if (!lastPayload) return Promise.resolve(null);
-    const windowHours = Math.max(24, Number(hours) || 168);
+    const now = Date.now();
+    let requiredHours = 168;
+    (lastPayload.servers || []).forEach(function (server) {
+      if (!server || !server.period_start) return;
+      const start = new Date(String(server.period_start).slice(0, 10) + 'T00:00:00').getTime();
+      if (!Number.isFinite(start)) return;
+      requiredHours = Math.max(requiredHours, Math.ceil((now - start) / 3600000) + 48);
+    });
+    // A monthly cycle never needs more than ~33 days; cap the initial history
+    // request so one unusual date cannot make the public page download months of metrics.
+    const windowHours = Math.min(840, Math.max(168, Number(hours) || 0, requiredHours));
     const days = Math.ceil(windowHours / 24);
     const uuids = (lastPayload.servers || []).map(function (s) { return s.uuid; }).filter(Boolean);
 
-    function metricFallback() {
-      if (!uuids.length || !KomariAdapt.mergeMetricTraffic) return Promise.resolve(lastPayload);
+    function metricPrimary() {
+      if (!uuids.length || !KomariAdapt.mergeMetricTraffic) return Promise.resolve(false);
       return rpc('public:queryMetrics', {
         metric_keys: ['traffic.up', 'traffic.down'],
         entity_ids: uuids,
         hours: windowHours,
         aggregation: 'sum',
         fill_empty: false,
-        max_points: Math.max(168, days * 48),
-      }, 15000).then(function (raw) {
+        max_points: Math.min(1200, Math.max(336, days * 24 + 24)),
+      }, 18000).then(function (raw) {
         KomariAdapt.mergeMetricTraffic(lastPayload, raw, days);
-        return lastPayload;
-      }).catch(function () { return lastPayload; });
+        return (lastPayload.servers || []).some(function (s) { return s.traffic_source === 'metric_period'; });
+      }).catch(function () { return false; });
     }
 
-    return rpc('common:getRecords', { type: 'load', uuid: '', hours: windowHours, maxCount: 12000 }, 15000)
-      .then(function (raw) {
-        KomariAdapt.mergeTrafficHistory(lastPayload, raw, days);
-        return metricFallback();
-      }).catch(function () {
-        return metricFallback();
-      }).then(function () {
-        const any = (lastPayload.servers || []).some(function (s) { return s.daily_traffic && s.daily_traffic.length; });
-        lastPayload._traffic_history_status = any ? 'ok' : 'unavailable';
-        (lastPayload.servers || []).forEach(function (s) {
-          if (!s.daily_traffic || !s.daily_traffic.length) s.traffic_history_status = 'unavailable';
-        });
-        return lastPayload;
+    function recordFallback() {
+      return rpc('common:getRecords', { type: 'load', uuid: '', hours: windowHours, maxCount: 30000 }, 18000)
+        .then(function (raw) {
+          KomariAdapt.mergeTrafficHistory(lastPayload, raw, days);
+          return true;
+        }).catch(function () { return false; });
+    }
+
+    return metricPrimary().then(function () {
+      const missing = (lastPayload.servers || []).some(function (s) { return s.traffic_used == null; });
+      return missing ? recordFallback() : true;
+    }).then(function () {
+      const any = (lastPayload.servers || []).some(function (s) { return s.daily_traffic && s.daily_traffic.length; });
+      lastPayload._traffic_history_status = any ? 'ok' : 'unavailable';
+      (lastPayload.servers || []).forEach(function (s) {
+        if (!s.daily_traffic || !s.daily_traffic.length) s.traffic_history_status = 'unavailable';
       });
+      return lastPayload;
+    });
   }
 
   function fetchSeries(uuid, range, target) {
@@ -4538,8 +4758,9 @@ window.ProbeConfig = {
     sparkFromSeries: sparkFromSeries,
   };
 })(window);
+
 </script>
-  <script>
+  <script data-inline-source="dist/js/charts.js">
 (function (global) {
   function n(v) { return Number.isFinite(v) ? v : 0; }
 
@@ -4918,11 +5139,13 @@ window.ProbeConfig = {
 
   global.ProbeCharts = { spark: spark, multiSpark: multiSpark, bars: bars, stacked: stacked, wave: wave, ruler: ruler };
 })(window);
+
 </script>
-  <script>
+  <script data-inline-source="dist/js/land.js">
 (function(g){g.ProbeLand=[[[-180.0,69.0],[-175.3,67.7],[-173.9,66.1],[-174.6,67.1],[-169.7,66.1],[-173.0,65.7],[-172.1,65.0],[-173.2,64.2],[-178.4,65.5],[-178.5,66.4],[-180.0,65.1]],[[180.0,65.1],[175.1,64.7],[178.2,64.4],[179.1,62.3],[173.5,61.8],[170.3,59.9],[163.6,60.0],[161.9,58.0],[163.3,57.7],[163.4,56.2],[162.1,56.1],[162.1,54.7],[160.0,54.2],[160.0,53.1],[158.4,53.0],[156.7,50.9],[156.0,56.7],[165.3,62.5],[163.3,62.5],[163.3,61.7],[160.2,60.6],[160.4,62.0],[156.7,61.5],[154.2,59.9],[155.2,59.2],[142.5,59.2],[135.2,54.9],[136.8,54.6],[136.8,53.8],[137.7,54.3],[137.3,53.5],[139.7,54.3],[141.4,53.3],[140.6,53.1],[141.5,52.2],[140.4,49.0],[135.1,43.5],[133.0,42.7],[131.8,43.3],[127.5,39.7],[129.4,37.1],[129.1,35.1],[126.5,34.3],[126.3,34.6],[126.5,37.8],[124.7,38.1],[125.6,39.7],[121.1,38.7],[121.9,41.0],[117.7,39.1],[119.2,37.1],[122.7,37.4],[119.2,35.0],[121.9,31.7],[120.1,32.0],[121.9,30.9],[120.1,30.2],[122.0,29.2],[119.5,26.8],[119.7,25.4],[116.5,22.9],[114.3,22.3],[113.4,23.1],[113.5,22.2],[110.4,21.4],[110.3,20.2],[109.6,21.8],[106.6,21.0],[105.6,18.9],[108.9,15.2],[109.0,11.4],[104.8,8.8],[105.1,10.0],[100.9,12.6],[101.0,13.5],[100.0,13.3],[99.2,9.3],[103.2,5.3],[104.3,1.4],[101.3,2.8],[100.1,6.6],[98.3,8.2],[98.9,11.7],[97.7,16.6],[96.9,17.5],[95.5,15.7],[94.2,16.0],[94.1,19.4],[91.4,22.8],[89.0,21.6],[88.0,22.2],[80.3,15.7],[79.9,10.3],[77.5,8.1],[73.5,16.1],[72.9,22.3],[70.8,20.7],[68.9,22.3],[70.4,23.0],[67.5,23.9],[66.5,25.6],[61.8,25.0],[57.3,25.8],[56.7,27.2],[53.7,26.7],[48.9,30.4],[47.7,29.4],[50.8,24.7],[51.6,25.9],[51.3,24.3],[54.1,24.1],[56.5,26.4],[56.6,24.5],[59.8,22.2],[57.8,19.0],[55.0,17.0],[43.5,12.7],[42.7,16.7],[34.6,28.1],[35.0,29.5],[34.2,27.7],[32.6,29.9],[32.3,31.2],[34.2,31.3],[36.0,34.5],[36.2,36.8],[32.8,36.0],[27.4,36.7],[28.3,37.1],[27.3,37.0],[26.2,38.3],[27.2,38.4],[26.9,39.6],[26.1,39.5],[33.3,42.0],[38.4,40.9],[41.4,41.4],[41.4,42.7],[36.6,45.2],[39.3,47.3],[35.2,46.5],[34.5,45.9],[35.0,45.4],[34.8,46.1],[36.6,45.4],[34.0,44.4],[32.5,45.4],[33.6,46.2],[30.1,46.4],[27.3,42.4],[29.0,41.0],[26.2,40.0],[26.8,40.6],[22.6,40.5],[23.4,39.2],[22.5,38.9],[24.1,38.2],[22.7,37.6],[23.2,36.4],[21.7,36.8],[21.4,38.2],[23.2,38.2],[21.1,38.3],[19.3,40.4],[19.6,41.8],[13.5,45.8],[12.1,45.4],[12.4,44.2],[18.5,40.1],[16.9,40.4],[17.2,39.0],[16.1,37.9],[15.7,40.0],[8.7,44.4],[6.2,43.0],[3.3,43.3],[3.2,41.9],[1.0,41.0],[-0.2,39.7],[0.2,38.7],[-2.1,36.7],[-5.6,36.0],[-6.9,37.3],[-9.0,37.0],[-8.6,38.4],[-9.5,38.8],[-8.6,42.3],[-9.3,43.1],[-1.6,43.4],[-1.1,46.3],[-4.8,48.5],[-1.4,48.6],[-1.9,49.7],[0.0,49.3],[1.6,50.9],[4.3,51.4],[3.4,51.5],[5.9,53.4],[9.8,53.5],[8.3,54.8],[8.6,57.1],[10.7,57.7],[10.1,56.7],[11.0,56.4],[9.4,54.8],[10.9,54.0],[19.4,54.2],[21.1,55.7],[20.5,55.0],[21.2,55.0],[21.7,57.6],[24.4,57.2],[23.5,59.2],[30.3,60.0],[21.4,60.6],[21.1,62.8],[25.5,65.0],[22.6,65.9],[20.7,63.8],[17.7,63.0],[17.2,60.7],[19.1,59.7],[16.2,58.6],[16.9,58.5],[15.8,56.1],[12.8,55.4],[10.8,59.9],[8.2,58.1],[5.7,58.6],[6.6,59.6],[5.2,59.5],[7.1,60.5],[5.5,59.9],[5.0,61.0],[7.1,60.9],[7.7,61.2],[5.2,61.1],[5.2,61.9],[6.8,61.9],[5.1,62.2],[11.0,63.4],[11.4,64.1],[9.5,63.6],[14.2,66.3],[13.0,66.2],[13.5,67.0],[15.9,67.6],[14.8,67.9],[17.9,68.4],[16.5,68.5],[18.1,69.5],[23.5,70.0],[24.6,71.0],[25.9,70.9],[25.2,70.1],[29.0,70.9],[31.0,70.4],[28.6,70.2],[29.5,69.7],[32.1,69.9],[33.0,68.9],[35.3,69.3],[41.4,67.1],[39.1,66.1],[31.9,67.1],[34.9,65.9],[34.8,64.5],[37.4,63.8],[38.0,64.3],[36.8,65.2],[40.5,64.5],[39.7,65.5],[40.7,66.0],[44.1,66.0],[44.2,68.3],[43.3,68.7],[46.5,68.1],[44.9,67.4],[46.0,66.8],[53.9,69.0],[53.2,68.2],[59.8,68.3],[61.2,68.8],[60.2,69.6],[60.8,69.9],[68.3,68.1],[69.3,68.9],[66.8,69.6],[66.7,71.1],[69.4,72.9],[71.6,72.9],[72.9,72.7],[71.8,71.5],[73.6,68.4],[71.7,66.9],[69.1,66.6],[72.1,66.2],[74.8,67.7],[74.7,68.8],[76.6,69.0],[77.1,67.8],[78.8,67.5],[77.5,67.7],[77.7,68.9],[75.9,69.3],[73.8,69.2],[74.3,70.6],[73.0,71.4],[74.8,72.8],[76.1,71.2],[78.5,70.9],[76.0,71.9],[78.4,72.4],[83.3,71.7],[82.0,70.6],[82.8,71.0],[82.4,70.2],[83.6,69.7],[83.7,71.6],[80.9,72.4],[80.5,73.6],[87.2,73.8],[85.9,74.9],[94.1,75.9],[93.3,76.1],[99.8,76.0],[98.9,76.5],[104.1,77.7],[107.5,76.9],[106.5,76.5],[113.9,75.8],[112.3,75.8],[113.6,75.2],[107.0,73.6],[105.5,72.7],[111.0,73.7],[110.0,74.0],[122.8,72.9],[124.4,73.8],[128.8,73.2],[129.5,72.7],[128.4,72.5],[129.6,72.2],[128.3,72.1],[131.0,70.7],[132.8,72.0],[140.1,71.4],[139.3,71.9],[140.2,72.3],[139.1,72.3],[140.9,72.9],[146.9,72.3],[145.3,71.6],[148.4,72.3],[152.5,70.8],[158.9,70.9],[161.1,69.2],[167.8,69.8],[170.5,68.8],[170.5,70.1],[176.1,69.9],[180.0,69.0]],[[31.9,31.5],[36.9,22.1],[37.4,18.9],[39.7,15.1],[43.3,12.5],[42.5,11.5],[44.6,10.4],[50.8,12.0],[51.4,10.4],[48.0,4.5],[40.8,-1.9],[39.2,-4.7],[40.8,-14.8],[34.6,-19.7],[35.5,-24.1],[32.5,-26.0],[32.4,-28.5],[27.0,-33.6],[20.0,-34.8],[18.4,-34.3],[18.2,-31.7],[11.8,-18.0],[13.9,-11.0],[12.7,-6.0],[8.7,-0.7],[10.0,0.2],[9.7,4.1],[8.2,4.9],[6.0,4.3],[3.8,6.6],[-2.0,4.8],[-8.7,4.8],[-12.5,7.4],[-15.5,11.3],[-14.9,12.0],[-16.8,12.4],[-16.7,13.5],[-16.4,13.2],[-15.6,13.5],[-17.5,14.7],[-16.0,17.7],[-17.0,21.8],[-14.5,26.2],[-10.2,29.3],[-9.3,32.5],[-5.5,35.9],[-2.0,35.1],[1.1,36.5],[9.7,37.3],[11.0,37.1],[10.2,33.8],[19.0,30.3],[21.7,32.9],[29.1,30.8]],[[-81.1,8.8],[-79.5,8.9],[-80.4,7.2],[-85.7,9.9],[-87.4,13.4],[-103.5,18.3],[-105.5,20.0],[-106.0,22.9],[-109.4,25.7],[-113.1,31.2],[-115.0,31.9],[-109.5,23.2],[-112.2,24.8],[-112.2,26.1],[-115.0,27.7],[-114.0,27.7],[-114.0,28.5],[-117.4,33.3],[-120.6,34.6],[-122.3,38.1],[-123.7,38.9],[-124.6,42.8],[-123.4,46.2],[-124.7,48.4],[-122.8,48.1],[-122.9,47.0],[-122.5,48.8],[-124.8,50.9],[-127.8,51.2],[-127.0,52.7],[-128.4,52.3],[-127.8,52.7],[-129.0,53.5],[-128.1,53.5],[-130.5,54.4],[-129.7,55.0],[-129.9,55.9],[-130.9,54.8],[-131.0,56.1],[-132.2,55.6],[-131.5,56.2],[-135.3,59.5],[-135.1,58.2],[-137.0,59.1],[-136.7,58.2],[-139.5,60.1],[-144.3,60.0],[-146.3,61.1],[-151.7,59.2],[-151.4,60.7],[-149.0,60.8],[-150.1,61.2],[-149.2,61.5],[-150.6,61.4],[-154.1,59.4],[-153.2,58.9],[-159.6,55.6],[-163.4,54.8],[-157.4,57.5],[-156.8,59.0],[-162.1,58.6],[-162.2,60.2],[-164.1,59.8],[-164.5,60.6],[-163.4,60.7],[-166.1,61.5],[-164.4,63.2],[-161.1,63.5],[-160.8,64.7],[-166.2,64.6],[-168.1,65.7],[-161.1,66.1],[-162.5,67.0],[-161.6,66.4],[-160.2,66.5],[-166.8,68.3],[-156.5,71.4],[-135.3,68.6],[-136.0,69.2],[-129.7,70.3],[-130.9,69.3],[-127.4,70.1],[-128.0,70.6],[-125.5,69.3],[-124.5,70.2],[-124.4,69.3],[-121.9,69.8],[-113.9,68.4],[-115.1,67.8],[-110.0,68.0],[-107.2,66.3],[-108.0,67.8],[-105.7,68.6],[-108.8,68.3],[-106.2,68.9],[-102.2,67.7],[-95.9,68.3],[-96.4,67.5],[-95.3,67.2],[-95.5,68.1],[-93.3,69.4],[-96.2,69.9],[-95.8,70.7],[-96.6,70.8],[-94.5,72.0],[-91.5,70.2],[-92.9,69.7],[-90.3,69.5],[-91.4,69.4],[-90.2,68.2],[-88.2,68.9],[-87.5,67.1],[-84.7,68.7],[-85.5,69.9],[-82.5,69.7],[-83.3,69.5],[-81.3,69.2],[-82.6,68.4],[-81.2,67.5],[-83.3,66.3],[-86.8,66.5],[-85.9,66.2],[-87.3,65.3],[-90.9,65.9],[-86.9,65.1],[-90.7,63.4],[-93.8,64.2],[-90.6,63.2],[-93.6,62.0],[-95.0,59.1],[-93.2,58.7],[-92.8,56.9],[-90.8,57.3],[-82.3,55.2],[-82.3,52.9],[-79.8,51.1],[-78.4,52.2],[-79.8,54.6],[-76.5,56.4],[-77.0,58.0],[-78.6,58.7],[-77.2,60.0],[-78.2,62.3],[-73.7,62.5],[-69.5,61.1],[-69.6,60.1],[-70.9,60.0],[-69.2,59.3],[-70.3,58.8],[-68.3,58.8],[-68.7,58.0],[-66.0,58.3],[-65.5,59.7],[-64.4,60.2],[-62.9,58.7],[-63.6,58.3],[-62.6,58.5],[-63.4,58.0],[-61.4,57.1],[-62.5,56.8],[-60.3,55.8],[-60.7,55.0],[-57.3,54.6],[-60.8,53.2],[-58.2,54.2],[-55.8,53.3],[-56.5,52.6],[-55.7,52.1],[-59.9,50.3],[-66.5,50.3],[-70.0,48.3],[-71.2,46.8],[-68.2,48.6],[-64.6,49.1],[-64.3,48.4],[-66.8,48.0],[-61.0,45.3],[-65.5,43.5],[-66.1,44.5],[-63.4,45.4],[-68.8,44.7],[-71.1,42.4],[-70.0,41.6],[-73.6,41.0],[-74.9,38.9],[-75.5,39.7],[-75.1,38.4],[-75.9,37.1],[-75.9,39.5],[-76.3,38.0],[-77.2,38.7],[-76.2,37.9],[-77.0,37.2],[-76.0,36.9],[-75.5,35.8],[-76.0,36.7],[-76.7,35.9],[-75.7,35.6],[-77.0,35.5],[-76.3,34.9],[-81.6,31.2],[-80.0,26.8],[-80.6,25.0],[-83.7,29.9],[-88.0,30.8],[-90.4,30.2],[-89.2,29.9],[-89.4,28.9],[-95.0,29.7],[-97.8,27.3],[-97.9,22.6],[-95.9,18.7],[-91.6,18.4],[-90.3,21.1],[-86.8,21.3],[-88.9,15.9],[-83.4,15.3],[-83.9,11.3]],[[-73.4,-53.0],[-73.7,-52.0],[-72.9,-52.5],[-72.5,-51.8],[-73.9,-51.6],[-73.3,-50.7],[-74.7,-50.2],[-73.6,-49.7],[-74.7,-48.0],[-73.2,-48.0],[-75.6,-46.7],[-74.7,-45.8],[-73.6,-46.5],[-72.5,-44.5],[-73.3,-44.2],[-72.3,-41.4],[-74.0,-41.0],[-73.7,-37.3],[-71.6,-33.6],[-70.3,-18.4],[-75.9,-14.7],[-81.3,-4.3],[-79.7,-2.6],[-80.9,-2.3],[-80.1,0.8],[-77.0,3.9],[-78.1,8.4],[-79.9,9.4],[-76.8,7.9],[-75.3,10.8],[-71.7,12.5],[-71.7,9.1],[-71.6,10.8],[-69.8,11.4],[-70.0,12.2],[-68.1,10.5],[-61.9,10.7],[-62.9,10.4],[-59.0,8.0],[-58.7,6.4],[-54.2,5.9],[-51.3,4.3],[-49.9,1.2],[-52.7,-1.6],[-50.9,-0.9],[-50.5,-1.9],[-49.3,-1.7],[-49.7,-2.7],[-48.1,-0.7],[-46.2,-0.9],[-44.8,-1.4],[-44.8,-3.4],[-43.4,-2.3],[-40.0,-2.8],[-35.6,-5.1],[-34.8,-7.2],[-38.8,-12.8],[-39.1,-17.7],[-41.0,-22.0],[-48.7,-25.4],[-48.8,-28.5],[-52.1,-32.2],[-50.6,-30.5],[-51.3,-30.0],[-54.2,-34.7],[-57.9,-34.5],[-58.4,-33.1],[-58.6,-34.4],[-56.7,-36.3],[-57.5,-38.1],[-62.3,-38.8],[-62.4,-40.9],[-65.0,-40.7],[-65.0,-42.1],[-63.6,-42.6],[-65.0,-42.7],[-64.3,-43.0],[-65.5,-44.9],[-67.6,-46.1],[-65.8,-47.9],[-68.7,-49.8],[-69.6,-51.6],[-68.4,-52.3],[-70.9,-52.7],[-71.3,-53.9],[-72.5,-53.4],[-71.5,-52.6]],[[146.2,-38.7],[140.6,-38.0],[139.5,-36.0],[138.1,-35.6],[138.1,-34.1],[137.8,-35.1],[136.9,-35.3],[138.0,-33.6],[137.8,-32.5],[136.0,-35.0],[134.2,-32.5],[131.2,-31.5],[118.0,-35.1],[115.1,-34.4],[115.9,-32.0],[113.2,-26.1],[114.2,-26.3],[113.4,-24.4],[114.0,-21.9],[114.3,-22.5],[116.8,-20.5],[121.1,-19.5],[122.9,-16.4],[123.6,-17.6],[123.6,-16.2],[124.4,-16.6],[125.0,-16.4],[124.4,-15.7],[126.0,-13.9],[127.4,-13.9],[128.0,-15.5],[129.6,-15.2],[130.6,-12.4],[132.8,-12.2],[132.0,-11.1],[136.6,-11.9],[135.4,-14.9],[140.6,-17.6],[142.5,-10.7],[143.8,-14.4],[145.3,-14.9],[146.3,-18.9],[148.8,-20.2],[149.6,-22.6],[150.7,-22.3],[153.2,-25.9],[153.6,-28.6],[150.0,-37.5]],[[-42.9,60.5],[-46.2,60.7],[-45.2,61.2],[-49.1,61.4],[-48.3,61.5],[-51.6,63.7],[-49.6,64.3],[-51.0,65.2],[-52.0,64.2],[-51.3,65.0],[-52.6,65.3],[-50.5,65.7],[-53.5,66.0],[-50.3,66.8],[-53.7,66.1],[-52.2,66.8],[-53.9,67.2],[-51.5,67.3],[-53.8,67.4],[-50.3,67.9],[-53.7,67.5],[-50.3,67.9],[-53.5,68.3],[-50.7,68.5],[-50.2,70.1],[-54.6,70.7],[-50.6,70.3],[-52.5,71.2],[-51.4,71.5],[-53.0,71.4],[-51.7,71.7],[-55.9,71.7],[-54.3,72.5],[-56.1,74.3],[-57.3,74.1],[-56.2,74.6],[-60.9,76.2],[-68.5,76.1],[-69.6,76.4],[-67.9,76.7],[-71.4,77.1],[-66.2,77.6],[-73.1,78.2],[-66.0,79.1],[-63.8,80.1],[-67.5,80.3],[-61.8,81.0],[-61.8,81.8],[-57.2,81.3],[-60.1,82.0],[-40.9,82.4],[-45.9,82.9],[-44.3,83.3],[-21.9,82.6],[-34.3,81.8],[-22.9,82.1],[-24.8,80.5],[-12.9,81.7],[-21.3,80.6],[-16.1,80.5],[-20.6,80.1],[-17.6,80.0],[-22.0,77.7],[-18.3,76.8],[-22.7,76.7],[-19.4,75.7],[-22.5,75.5],[-19.0,74.5],[-22.5,74.1],[-20.4,73.5],[-25.8,73.9],[-24.7,73.5],[-27.7,73.1],[-21.9,71.7],[-22.6,71.5],[-21.5,70.5],[-28.4,72.0],[-25.4,71.3],[-29.3,70.5],[-22.1,70.1],[-29.4,68.2],[-32.6,68.6],[-32.1,67.9],[-34.8,66.3],[-41.1,65.1],[-40.3,64.3],[-41.6,64.3],[-40.5,63.7],[-43.2,62.7],[-42.1,62.4],[-43.6,61.1]],[[147.2,-7.5],[150.9,-10.2],[147.7,-10.1],[144.8,-7.4],[142.2,-8.2],[143.4,-8.8],[142.6,-9.3],[139.0,-8.3],[138.1,-5.4],[134.0,-3.9],[133.8,-2.9],[132.9,-4.1],[131.9,-2.8],[133.9,-2.1],[130.9,-1.4],[132.4,-0.3],[134.0,-0.7],[135.1,-3.4],[137.9,-1.5],[144.5,-3.8],[147.6,-6.1]],[[115.0,-4.0],[110.3,-3.0],[108.9,1.2],[109.6,2.1],[111.2,1.4],[111.4,2.7],[117.2,7.0],[119.3,5.4],[117.0,3.6],[119.0,1.0],[117.9,1.1]],[[45.0,-25.5],[43.2,-22.3],[44.5,-20.0],[43.9,-17.5],[44.4,-16.2],[47.2,-15.5],[49.3,-12.0],[50.5,-15.4],[49.6,-15.5],[47.1,-25.0]],[[-66.0,62.0],[-71.6,63.1],[-73.3,64.7],[-78.0,64.4],[-77.4,65.5],[-73.5,65.4],[-74.5,66.2],[-72.1,66.7],[-73.7,68.7],[-76.6,68.7],[-75.6,69.2],[-77.0,70.0],[-79.0,70.7],[-78.8,69.9],[-85.8,70.0],[-89.5,71.1],[-84.8,70.9],[-84.5,71.6],[-86.0,72.0],[-84.1,72.0],[-85.7,72.9],[-81.5,73.7],[-80.2,72.7],[-81.0,71.9],[-77.7,71.7],[-78.9,72.2],[-77.0,72.1],[-78.6,72.4],[-77.6,72.8],[-74.2,72.1],[-75.0,71.2],[-70.6,71.1],[-71.5,70.0],[-68.3,70.5],[-70.0,69.6],[-67.2,69.7],[-70.1,69.5],[-66.7,69.2],[-69.4,68.8],[-61.3,66.7],[-63.5,65.9],[-63.5,64.9],[-65.5,65.7],[-64.4,66.4],[-67.9,66.6],[-67.1,66.0],[-68.2,65.4],[-65.7,64.8],[-64.5,63.2],[-69.0,63.8]],[[105.7,-5.9],[101.6,-3.2],[95.2,5.6],[97.5,5.3],[103.7,0.3],[103.3,-0.7],[106.1,-3.2]],[[136.0,33.7],[135.3,34.7],[130.9,34.3],[133.1,35.6],[136.1,35.7],[136.8,37.4],[137.3,36.8],[139.4,38.1],[139.9,40.6],[141.5,41.4],[142.1,39.5],[140.9,35.7],[138.8,34.6],[136.7,35.1]],[[-113.6,69.0],[-117.4,70.0],[-111.4,70.3],[-117.7,70.6],[-118.3,71.0],[-115.0,71.5],[-119.1,71.8],[-114.5,73.4],[-114.5,72.6],[-109.9,73.0],[-107.8,71.6],[-108.2,73.2],[-106.8,73.3],[-105.3,72.8],[-104.5,71.0],[-101.0,70.2],[-103.5,69.7],[-101.8,69.0]],[[1.4,51.2],[-5.7,50.1],[-2.3,51.8],[-5.3,51.9],[-2.7,53.4],[-3.1,55.0],[-5.1,54.9],[-4.8,56.2],[-5.8,55.3],[-5.0,56.7],[-6.2,56.7],[-5.0,58.6],[-3.0,58.6],[-4.4,57.5],[-1.8,57.6],[-3.8,56.1],[-2.1,55.9],[-0.0,52.9],[1.8,52.5],[0.3,51.5]],[[-82.4,82.7],[-63.6,82.8],[-61.1,82.4],[-69.3,81.7],[-66.6,81.5],[-70.0,81.1],[-64.6,81.4],[-78.0,79.4],[-74.4,79.0],[-78.9,79.1],[-74.6,78.6],[-78.7,77.3],[-82.0,77.7],[-78.0,77.0],[-81.1,76.1],[-89.7,76.6],[-86.6,77.2],[-88.2,77.9],[-84.5,77.3],[-82.3,78.1],[-84.8,77.5],[-84.6,78.6],[-87.5,78.1],[-86.9,78.7],[-81.5,79.1],[-84.7,79.0],[-83.4,79.1],[-86.5,80.3],[-80.6,79.6],[-83.2,80.3],[-76.5,80.9],[-79.0,80.9],[-76.8,81.5],[-86.1,80.5],[-82.3,81.2],[-87.5,80.6],[-89.4,80.9],[-84.6,81.3],[-91.9,81.7],[-80.4,82.0]],[[120.5,-5.6],[118.8,-2.8],[120.0,0.7],[125.2,1.7],[124.3,0.4],[120.3,0.4],[120.7,-1.4],[123.5,-0.8],[121.3,-1.8],[122.9,-4.4],[121.5,-4.8],[120.8,-2.6]],[[170.0,-46.3],[166.7,-46.2],[166.8,-45.3],[170.7,-43.1],[172.1,-40.9],[174.3,-41.0],[173.1,-43.9],[171.7,-43.5]],[[114.0,-8.6],[107.8,-7.7],[105.2,-6.8],[106.0,-5.9],[111.0,-6.4],[114.4,-7.8]],[[174.9,-41.0],[175.1,-39.9],[173.8,-39.3],[174.9,-37.1],[174.5,-37.0],[172.7,-34.4],[176.0,-37.7],[178.6,-37.7],[176.0,-41.2]],[[-54.1,47.9],[-56.0,47.0],[-54.7,47.7],[-59.4,47.9],[-55.9,51.6],[-56.9,49.5],[-53.5,49.3],[-53.9,47.9],[-52.6,47.5],[-53.2,46.6],[-54.2,46.8]],[[-74.1,20.2],[-77.7,19.8],[-77.2,20.7],[-81.9,22.7],[-82.8,22.7],[-84.0,21.9],[-85.0,21.9],[-84.0,22.7],[-81.1,23.2]],[[124.0,13.0],[120.6,13.8],[119.7,16.0],[120.6,18.5],[122.3,18.4],[121.7,14.4]],[[-17.0,63.8],[-22.7,63.8],[-21.4,64.4],[-24.0,64.9],[-21.7,65.5],[-24.5,65.5],[-22.4,65.8],[-23.1,66.4],[-21.1,65.2],[-20.4,66.1],[-16.2,66.5],[-13.5,65.1]],[[125.0,5.9],[123.7,7.8],[121.9,7.1],[123.4,8.7],[123.7,8.0],[125.5,9.0],[125.4,9.8],[126.6,7.3]],[[-6.3,52.2],[-10.4,51.8],[-8.7,52.7],[-9.9,52.6],[-8.9,53.2],[-10.1,54.2],[-6.1,55.2],[-5.4,54.5],[-6.4,54.0]],[[143.3,42.0],[140.5,42.6],[141.2,41.8],[140.0,41.6],[139.8,42.6],[141.4,43.3],[141.9,45.5],[145.8,43.4]],[[142.0,46.0],[141.6,52.3],[142.7,54.4],[144.7,48.6],[143.0,49.1],[142.5,47.8],[143.6,46.4]],[[-68.3,18.6],[-71.4,17.6],[-74.5,18.4],[-72.4,18.5],[-72.8,20.0]],[[-115.3,73.5],[-123.1,71.1],[-126.0,72.0],[-123.8,73.8],[-124.7,74.4]],[[80.3,6.0],[79.7,8.2],[80.2,9.8],[81.9,7.0]],[[146.0,-43.3],[144.7,-40.7],[148.1,-40.8],[148.0,-43.2]],[[-92.2,75.0],[-93.1,76.4],[-95.4,76.2],[-96.8,77.0],[-79.3,74.9]],[[-65.1,-54.6],[-66.7,-55.0],[-72.0,-54.6],[-69.0,-54.5],[-70.4,-52.8],[-68.8,-52.6]],[[58.3,74.0],[53.7,73.8],[61.1,76.3],[68.6,77.0]],[[-80.1,63.8],[-83.0,64.2],[-85.2,63.1],[-87.2,63.6],[-85.6,65.9]],[[-111.0,75.3],[-117.7,75.3],[-115.0,75.7],[-117.2,75.6],[-114.9,76.5],[-108.9,75.5],[-110.4,76.4],[-109.1,76.8],[-108.0,75.8],[-105.4,75.9],[-112.4,74.4],[-114.4,74.7]],[[-94.2,79.0],[-90.3,79.2],[-95.1,79.3],[-94.3,79.8],[-96.7,80.1],[-94.4,80.0],[-96.6,80.4],[-93.8,80.5],[-95.5,80.8],[-93.5,81.4],[-84.9,79.3],[-88.9,78.1]],[[17.0,76.6],[13.9,77.5],[17.0,77.9],[13.6,78.1],[17.4,78.4],[13.0,78.2],[10.7,79.5],[16.5,78.9],[16.3,80.1],[21.5,78.7],[19.0,78.4]],[[-49.8,-1.8],[-50.3,-0.1],[-48.4,-0.3]],[[130.7,31.0],[130.5,33.3],[129.7,32.6],[129.6,33.3],[131.0,33.8],[132.1,32.9]],[[120.9,22.0],[120.1,23.6],[121.6,25.3],[122.0,25.0]],[[151.1,-6.0],[149.6,-6.3],[148.3,-5.6],[150.9,-5.5],[152.2,-4.1]],[[-85.0,71.3],[-87.0,71.2],[-90.0,71.5],[-89.1,73.2],[-86.6,73.9],[-84.8,73.7],[-86.3,72.7]],[[109.0,18.4],[109.3,19.9],[110.9,20.0],[110.4,18.7]],[[-96.5,72.8],[-99.2,71.4],[-102.7,72.7],[-100.2,72.8],[-101.6,73.5],[-100.9,73.8],[-97.0,73.7],[-98.5,73.0]],[[57.6,70.7],[51.4,71.8],[53.2,73.2],[56.5,73.2],[55.2,71.9]],[[-123.3,48.5],[-127.4,50.6],[-128.4,50.8],[-125.4,50.3]],[[124.0,-10.3],[125.1,-8.6],[127.3,-8.4]],[[15.0,36.7],[12.7,37.6],[12.5,38.0],[15.7,38.3]],[[-95.0,72.0],[-95.3,74.0],[-90.2,73.9],[-94.3,72.8],[-93.5,72.4]],[[8.5,39.0],[8.2,40.9],[9.2,41.3],[9.6,39.3]],[[138.0,74.8],[137.0,75.6],[138.8,76.2],[145.4,75.5]],[[134.2,33.2],[132.0,33.3],[134.6,34.2]],[[127.9,0.5],[128.4,-0.9],[127.7,-0.2],[127.4,1.0],[127.9,2.2],[127.6,0.9],[128.7,1.6],[128.9,0.2]],[[128.0,-3.1],[129.0,-2.8],[130.3,-3.0],[130.9,-3.9]],[[167.0,-22.3],[164.9,-21.4],[164.0,-20.1]],[[-97.3,75.4],[-100.8,75.4],[-99.6,75.7],[-102.9,75.6],[-98.5,76.7]],[[-119.2,77.3],[-115.4,77.3],[-122.6,75.9]],[[117.0,-9.1],[117.9,-8.1],[119.2,-8.6]],[[100.0,78.9],[92.9,79.6],[100.1,79.8]],[[27.0,79.9],[23.7,79.2],[17.7,80.1],[22.8,80.5]],[[123.0,-8.3],[121.7,-8.9],[119.8,-8.7],[120.4,-8.2]],[[-99.0,68.9],[-98.0,69.9],[-95.2,68.9],[-96.5,68.5]],[[123.2,11.0],[123.0,9.0],[122.4,9.8]],[[125.8,11.0],[125.0,11.8],[124.3,12.6],[125.5,12.2]],[[138.0,-8.4],[138.2,-7.5],[139.1,-7.6],[139.0,-8.1]],[[106.7,-3.0],[105.1,-2.1],[105.3,-1.6],[106.0,-1.6]],[[119.7,10.5],[117.2,8.3],[119.5,11.4]],[[122.0,10.4],[121.9,11.9],[123.2,11.6],[123.1,11.2]],[[-99.0,77.9],[-104.4,78.3],[-103.3,78.7],[-105.5,79.3]],[[100.3,78.0],[102.5,79.4],[105.5,78.5]],[[-79.3,72.7],[-80.8,73.8],[-76.1,72.9]],[[-76.2,17.9],[-77.7,17.9],[-78.3,18.4]],[[120.8,-10.0],[120.0,-10.0],[118.9,-9.5]],[[-59.8,46.0],[-61.3,45.5],[-61.6,46.0],[-60.4,47.0],[-61.2,45.7]],[[178.2,-17.3],[177.9,-18.3],[177.2,-18.0]],[[-154.8,19.5],[-155.8,19.0],[-155.9,20.3]],[[-180.0,-77.8],[-163.3,-78.6],[-158.2,-77.1],[-151.9,-77.4],[-145.5,-75.4],[-128.2,-74.3],[-127.1,-73.3],[-101.8,-75.1],[-101.2,-74.7],[-102.5,-74.5],[-101.4,-74.2],[-103.0,-73.6],[-101.3,-73.6],[-103.4,-72.3],[-98.7,-71.7],[-82.2,-73.8],[-77.4,-73.3],[-79.3,-73.0],[-78.9,-72.3],[-72.2,-73.1],[-75.4,-71.8],[-73.3,-70.8],[-76.5,-71.1],[-73.9,-70.5],[-75.8,-69.9],[-73.5,-70.3],[-70.5,-68.8],[-68.4,-70.1],[-68.8,-69.4],[-66.6,-68.2],[-67.5,-67.0],[-57.3,-63.2],[-60.7,-64.7],[-59.5,-65.2],[-62.2,-65.3],[-60.0,-66.8],[-61.5,-69.4],[-59.7,-72.5],[-61.7,-74.8],[-48.7,-77.8],[-36.0,-78.2],[-26.6,-76.1],[-27.7,-75.6],[-25.2,-75.1],[-25.7,-74.1],[-22.1,-74.3],[-19.2,-72.7],[0.0,-69.6],[24.6,-70.3],[33.6,-68.7],[38.8,-70.1],[39.9,-68.8],[50.9,-67.2],[50.4,-66.3],[53.8,-65.8],[59.1,-67.4],[69.6,-67.7],[74.5,-69.8],[86.0,-66.3],[94.3,-66.6],[96.4,-65.0],[102.5,-65.9],[102.9,-65.1],[108.8,-66.9],[113.2,-65.8],[117.6,-67.0],[134.7,-66.0],[146.2,-66.7],[145.3,-67.5],[147.7,-68.3],[153.9,-68.3],[170.3,-71.3],[171.0,-71.8],[169.2,-73.5],[162.6,-75.2],[165.8,-75.5],[162.5,-75.5],[162.3,-77.0],[164.4,-78.1],[166.9,-77.9],[166.7,-77.2],[180.0,-77.8],[180.0,-90.0],[-180.0,-90.0]]];})(window);
+
 </script>
-  <script>
+  <script data-inline-source="dist/js/app.js">
 (function () {
   const U = ProbeDemo.units;
   const main = document.getElementById("main");
@@ -4944,6 +5167,7 @@ window.ProbeConfig = {
   let lastView = "list";
   let home = "nodes";
   let showGlobe = localStorage.getItem("mmwx-globe") !== "0";
+  let globeQuality = "medium";
   let globeLon = 80;
   let globeLat = 30;
   let globeDrag = null;
@@ -4955,12 +5179,18 @@ window.ProbeConfig = {
   let pulse = ProbeDemo.monthPulse();
   let liveMode = false;
   let seriesCache = {};
+  let seriesCacheOrder = [];
+  const SERIES_CACHE_MAX = 64;
   let lastWindowKey = "";
   let subpageLiveTick = 0;
   let accessState = { known: false, logged_in: false, is_admin: false };
   let listSortKey = "";
   let listSortDir = 0; // 0=Komari default, -1=desc, 1=asc
   let regionFilter = "";
+  let nodeQuery = "";
+  let anomalyFilter = false;
+  let globePaintRAF = 0;
+  let globeLiveTick = 0;
   let financeSortKey = "";
   let financeSortDir = 0; // 0=default monthly desc, -1=desc, 1=asc
 
@@ -5123,6 +5353,29 @@ window.ProbeConfig = {
   }
   // Detailed coastline rings, loaded before the app in the same lon/lat format as upstream ProbeLand.
   const WORLD_OUTLINES = Array.isArray(window.ProbeLand) ? window.ProbeLand : [];
+  // Lightweight orientation geometry used only by the explicit Low globe mode.
+  const COARSE_WORLD_OUTLINES = [
+    [[-168,72],[-145,70],[-130,55],[-124,48],[-123,38],[-117,32],[-105,25],[-97,19],[-85,22],[-81,30],[-75,40],[-66,47],[-60,54],[-78,62],[-100,72],[-130,72],[-168,72]],
+    [[-82,12],[-75,8],[-70,-5],[-63,-15],[-58,-25],[-52,-33],[-58,-43],[-67,-55],[-74,-48],[-75,-32],[-80,-15],[-82,0],[-82,12]],
+    [[-10,36],[-6,44],[4,51],[15,56],[28,58],[42,55],[55,49],[68,52],[84,56],[100,60],[120,58],[140,50],[150,42],[145,32],[130,30],[122,20],[110,12],[100,7],[88,20],[75,24],[62,30],[48,28],[36,34],[28,40],[18,42],[8,39],[-10,36]],
+    [[-17,35],[-5,36],[10,33],[25,31],[35,23],[43,11],[51,2],[45,-12],[38,-25],[30,-34],[18,-35],[5,-30],[-5,-18],[-12,0],[-17,16],[-17,35]],
+    [[112,-11],[126,-13],[138,-18],[151,-26],[153,-37],[144,-43],[130,-40],[116,-34],[112,-22],[112,-11]],
+    [[130,32],[136,35],[141,41],[145,44],[143,36],[139,33],[130,32]],
+    [[-8,50],[-5,58],[-3,59],[1,54],[-2,50],[-8,50]],
+    [[-52,60],[-44,66],[-34,72],[-26,76],[-40,82],[-55,80],[-62,70],[-52,60]]
+  ];
+
+  function normalizeGlobeQuality(value) {
+    const q = String(value || "medium").trim().toLowerCase();
+    return q === "low" || q === "high" ? q : "medium";
+  }
+
+  function globeProfile() {
+    const q = normalizeGlobeQuality(globeQuality);
+    if (q === "low") return { key: "low", land: "coarse", coastStride: 1, gridLon: 60, gridLat: 30, curveStep: 8, sweepCount: 0, linkMode: 0, idleMs: 440 };
+    if (q === "high") return { key: "high", land: "detailed", coastStride: 1, gridLon: 30, gridLat: 30, curveStep: 3, sweepCount: 6, linkMode: 2, idleMs: 120 };
+    return { key: "medium", land: "detailed", coastStride: 2, gridLon: 30, gridLat: 30, curveStep: 6, sweepCount: 2, linkMode: 1, idleMs: 240 };
+  }
 
   const CARRIER = { telecom: "电信", unicom: "联通", mobile: "移动" };
   const ROUTE_PRESET_ALL = [
@@ -5170,6 +5423,26 @@ window.ProbeConfig = {
   function fmtDays(sec) {
     if (sec == null) return "—";
     return Math.floor(sec / U.DAY) + " 天";
+  }
+
+  function lastSeenText(server) {
+    if (!server || server.online || server.last_seen_at == null) return "";
+    const at = Number(server.last_seen_at);
+    if (!Number.isFinite(at)) return "";
+    const sec = Math.max(0, Math.floor((Date.now() - at) / 1000));
+    if (sec < 45) return "刚刚";
+    if (sec < 3600) return Math.max(1, Math.floor(sec / 60)) + " 分钟前";
+    if (sec < 86400) return Math.max(1, Math.floor(sec / 3600)) + " 小时前";
+    if (sec < 86400 * 60) return Math.max(1, Math.floor(sec / 86400)) + " 天前";
+    const d = new Date(at);
+    return pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  }
+
+  function statusHTML(server, compact) {
+    const online = !!(server && server.online);
+    const seen = online ? "" : lastSeenText(server);
+    const detail = seen ? '<small>' + h(seen) + '</small>' : '';
+    return '<span class="status ' + (online ? 'is-online' : 'is-offline') + (compact ? ' is-compact' : '') + '"><span>' + (online ? '在线' : '离线') + '</span>' + detail + '</span>';
   }
 
   function pct(used, total) {
@@ -5676,12 +5949,80 @@ window.ProbeConfig = {
     return Math.max(0, Math.ceil((ms - Date.now()) / 86400000));
   }
 
+  function trafficQuotaPct(server) {
+    if (!server || server.traffic_used == null || !Number(server.traffic_limit)) return null;
+    return Math.max(0, (Number(server.traffic_used) / Number(server.traffic_limit)) * 100);
+  }
+
+  function trafficForecast(server) {
+    if (!server || server.traffic_used == null || !Number(server.traffic_limit)) return null;
+    const rows = (server.daily_traffic || []).slice(-7).filter(function (r) { return r && Number.isFinite(Number(r.total)); });
+    if (rows.length < 3) return { kind: 'unknown', text: '预测数据不足' };
+    const avg = rows.reduce(function (n, r) { return n + Math.max(0, Number(r.total) || 0); }, 0) / rows.length;
+    const remain = Math.max(0, Number(server.traffic_limit) - Number(server.traffic_used));
+    const reset = trafficResetDays(server);
+    if (remain <= 0) return { kind: 'bad', text: '本账期额度已耗尽', days: 0, avg: avg };
+    if (!Number.isFinite(avg) || avg <= 0) return { kind: 'good', text: '近期流量很低', avg: avg };
+    const days = Math.max(1, Math.ceil(remain / avg));
+    if (reset != null && days < reset) return { kind: 'bad', text: '预计 ' + days + ' 天后耗尽', days: days, avg: avg };
+    return { kind: 'good', text: '预计可撑过本账期', days: days, avg: avg };
+  }
+
+  function anomalyKinds(server) {
+    const out = [];
+    if (!server || !server.online) out.push('offline');
+    const ms = pingMs(server);
+    const loss = pingLoss(server);
+    const remain = remainingDaysNumber(server);
+    const traffic = trafficQuotaPct(server);
+    if (ms != null && ms > 180) out.push('latency');
+    if (loss != null && loss >= 10) out.push('loss');
+    if (remain != null && remain <= 7) out.push('expiry');
+    if (traffic != null && traffic >= 90) out.push('traffic');
+    return out;
+  }
+
+  function isAnomalous(server) { return anomalyKinds(server).length > 0; }
+
+  function anomalySummary() {
+    const out = { total: 0, offline: 0, latency: 0, loss: 0, expiry: 0, traffic: 0 };
+    (state.servers || []).forEach(function (server) {
+      const kinds = anomalyKinds(server);
+      if (kinds.length) out.total += 1;
+      kinds.forEach(function (kind) { if (out[kind] != null) out[kind] += 1; });
+    });
+    return out;
+  }
+
+  function anomalyNotice() {
+    const a = anomalySummary();
+    if (!anomalyFilter && !nodeQuery) return '';
+    const bits = [];
+    if (anomalyFilter) bits.push('异常 ' + a.total + ' · 离线 ' + a.offline + ' · 高延迟 ' + a.latency + ' · 高丢包 ' + a.loss + ' · 临期 ' + a.expiry + ' · 高流量 ' + a.traffic);
+    if (nodeQuery) bits.push('搜索：' + nodeQuery);
+    return '<div class="filter-notice"><span>' + h(bits.join('　')) + '</span><button type="button" data-clear-filters>清除筛选</button></div>';
+  }
+
+  function serverSearchText(server) {
+    const rd = regionDisplay(server);
+    const routes = effectiveRoutes(server).map(function (rt) { return [rt.carrier, rt.route_type, rt.region].filter(Boolean).join(' '); }).join(' ');
+    return [server && server.name, displayCountry(server), rd && rd.label, server && server.group, server && server.provider_name, server && server.asn, server && server.asn_org, routes].filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function serverMatchesQuery(server) {
+    const q = String(nodeQuery || '').trim().toLowerCase();
+    if (!q) return true;
+    return q.split(/\s+/).filter(Boolean).every(function (token) { return serverSearchText(server).indexOf(token) >= 0; });
+  }
+
   function quotaMini(server) {
     const used = server.traffic_used == null ? null : Number(server.traffic_used);
     const limit = Number(server.traffic_limit || 0);
     const p = used == null ? 0 : pct(used, limit);
+    const forecast = trafficForecast(server);
+    const quotaTitle = used == null ? "暂无账期流量" : (limit ? ("已用 " + p.toFixed(1) + "%" + (forecast ? " · " + forecast.text : "")) : "无限额");
     return (
-      '<span class="quota-cell hide-sm" title="' + h(used == null ? "暂无流量累计" : (limit ? ("已用 " + p.toFixed(1) + "%") : "无限额")) + '">' +
+      '<span class="quota-cell hide-sm" title="' + h(quotaTitle) + '">' +
         '<span class="quota-cell-n">' + fmtBytes(used, 1) + (limit ? " / " + fmtBytes(limit, 2) : "") + "</span>" +
         '<span class="quota-cell-mobile">' + fmtBytes(used, 1) + "</span>" +
         '<span class="quota-mini' + quotaTone(p) + '" style="--p:' + (limit && used != null ? p : 0) + '%"><i></i></span>' +
@@ -5807,13 +6148,23 @@ window.ProbeConfig = {
     if (!ll) return;
     globeLon = ll[0];
     globeLat = Math.max(-78, Math.min(78, ll[1]));
-    paintGlobe();
+    queueGlobePaint();
+  }
+
+  function liveSignature(server) {
+    if (!server) return '0';
+    const p = primaryPing(server) || {};
+    return String(hashText(JSON.stringify([
+      !!server.online, server.last_seen_at || 0, server.download_speed, server.upload_speed,
+      server.cpu_pct, server.mem_used, server.disk_used, server.traffic_used,
+      p.current_ms, p.loss_pct, server.uptime, remainingDaysNumber(server), trafficResetDays(server)
+    ])));
   }
 
   function card(server, i) {
     const loss = pingLoss(server);
     return (
-      '<button class="cell' + cardTone(server) + '" data-index="' + attr(i) + '" type="button">' +
+      '<button class="cell' + cardTone(server) + '" data-index="' + attr(i) + '" data-live-sig="' + liveSignature(server) + '" type="button">' +
         '<div class="card">' +
           '<span class="card-coord">' + h(cardCoord(server)) + "</span>" +
           '<div class="card-face">' +
@@ -5821,7 +6172,7 @@ window.ProbeConfig = {
               '<span class="cc">' + h(displayCountry(server) || "") + "</span>" +
               '<span class="name">' + h(server.name || "未命名") + "</span>" +
               '<span class="dot' + (server.online ? "" : " is-off") + '"></span>' +
-              '<span class="status ' + (server.online ? "is-online" : "is-offline") + '">' + (server.online ? "在线" : "离线") + "</span>" +
+              statusHTML(server, true) +
             "</div>" +
             '<div class="speeds">' +
               '<span>实时网速　↓ <b>' + fmtSpeed(server.download_speed) + "</b>　↑ <b>" + fmtSpeed(server.upload_speed) + "</b></span>" +
@@ -5847,10 +6198,10 @@ window.ProbeConfig = {
     const mem = pctMetric(server.mem_used, server.mem_total);
     const disk = pctMetric(server.disk_used, server.disk_total);
     return (
-      '<button class="row" data-index="' + attr(i) + '" type="button">' +
+      '<button class="row" data-index="' + attr(i) + '" data-live-sig="' + liveSignature(server) + '" type="button">' +
         '<span class="cc">' + h(displayCountry(server) || "") + "</span>" +
         '<span class="name">' + h(server.name || "未命名") + "</span>" +
-        '<span class="status ' + (server.online ? "is-online" : "is-offline") + '">' + (server.online ? "在线" : "离线") + "</span>" +
+        statusHTML(server, false) +
         '<span class="speeds row-speeds">' + rowSpeedPair(server) + '</span>' +
         '<span class="latency-cell"><span class="ms' + latencyTone(ms) + '">' + (ms == null ? "—" : ms + " ms") + '</span><small class="' + lossTone(pingLoss(server)).trim() + '">' + lossText(pingLoss(server)) + '</small></span>' +
         sparkOf(server) +
@@ -5887,13 +6238,13 @@ window.ProbeConfig = {
       return h(CARRIER[rt.carrier] || rt.carrier || "—") + " <b>" + h(rt.route_type || "—") + "</b>";
     }).join("　");
     return (
-      '<button class="slab" data-index="' + attr(i) + '" type="button">' +
+      '<button class="slab" data-index="' + attr(i) + '" data-live-sig="' + liveSignature(server) + '" type="button">' +
         '<div class="slab-top">' +
           '<div class="head">' +
             '<span class="cc">' + h(displayCountry(server) || "") + "</span>" +
             '<span class="name">' + h(server.name || "未命名") + "</span>" +
             '<span class="dot' + (server.online ? "" : " is-off") + '"></span>' +
-            '<span class="status ' + (server.online ? "is-online" : "is-offline") + '">' + (server.online ? "在线" : "离线") + " · " + h(server.region_city || server.region_name || "") + "</span>" +
+            statusHTML(server, true) + '<span class="slab-region">' + h(server.region_city || server.region_name || "") + '</span>' +
           "</div>" +
           '<span class="more">打开窗口 →</span>' +
         "</div>" +
@@ -5963,13 +6314,17 @@ window.ProbeConfig = {
     const monthCNY = aggregateCNY(state.servers || [], false);
     const monthGroups = costGroups(state.servers || [], false);
     const fxLabel = state._fx_source ? (state._fx_source === "cache" ? "汇率缓存" : state._fx_source === "stale-cache" ? "旧汇率缓存" : state._fx_source === "default" ? "备用汇率" : state._fx_source) : "汇率加载中";
+    const financeKnown = !!accessState.known;
+    const financeVisible = !!accessState.logged_in;
+    const financeValue = !financeKnown ? "…" : !financeVisible ? "*" : (monthCNY == null ? "—" : ("≈ ¥" + monthCNY.toFixed(2)));
+    const financeSub = !financeKnown ? "正在确认权限" : !financeVisible ? "登录后可见" : (h(fxLabel) + " · " + costGroupsHTML(monthGroups));
     return (
       '<section class="fleet" aria-label="集群概览">' +
         "<article><div class='lbl'>节点</div><div class='val'>" + t.all + "</div><div class='sub'>在线 " + t.online + " · 离线 " + (t.all - t.online) + "</div></article>" +
         "<article><div class='lbl'>地区</div><div class='val'>" + Object.keys(regions).length + "</div><div class='sub'>独立地域</div></article>" +
         "<article><div class='lbl'>下行合计</div><div class='val'>" + fmtSpeed(down) + "</div><div class='sub'>上行 " + fmtSpeed(up) + "</div></article>" +
         "<article><div class='lbl'>流量累计</div><div class='val'>" + fmtBytes(t.used, 1) + "</div><div class='sub'>限额 " + fmtBytes(t.limit, 2) + "</div></article>" +
-        "<article class='fleet-finance' data-finance-detail role='button' tabindex='0' aria-label='查看月均成本明细'><div class='lbl'>月均成本</div><div class='val'>" + (monthCNY == null ? "—" : ("≈ ¥" + monthCNY.toFixed(2))) + "</div><div class='sub'>" + h(fxLabel) + " · " + costGroupsHTML(monthGroups) + "</div></article>" +
+        "<article class='fleet-finance' data-finance-detail role='button' tabindex='0' aria-label='查看月均成本明细'><div class='lbl'>月均成本</div><div class='val'>" + financeValue + "</div><div class='sub'>" + financeSub + "</div></article>" +
       "</section>"
     );
   }
@@ -6044,6 +6399,8 @@ window.ProbeConfig = {
     if (applyRegionFilter && regionFilter) {
       base = base.filter(function (item) { return regionDisplay(item.s).label === regionFilter; });
     }
+    if (nodeQuery) base = base.filter(function (item) { return serverMatchesQuery(item.s); });
+    if (anomalyFilter) base = base.filter(function (item) { return isAnomalous(item.s); });
     if (!applyInteractiveSort || !listSortKey || !listSortDir) return base;
     return base.map(function (item, idx) { return { item: item, idx: idx, value: listSortValue(item.s, listSortKey) }; }).sort(function (a, b) {
       let cmp = 0;
@@ -6060,9 +6417,14 @@ window.ProbeConfig = {
   }
 
   function listToolbar(r) {
+    const a = anomalySummary();
     return (
       '<div class="list-bar" id="views">' +
-        '<span class="list-bar-k">机器清单</span>' +
+        '<div class="list-bar-left">' +
+          '<span class="list-bar-k">机器清单</span>' +
+          '<button class="filter-pill' + (anomalyFilter ? ' is-on' : '') + '" data-anomaly-filter type="button">异常 <b data-anomaly-count>' + a.total + '</b></button>' +
+          '<label class="node-search"><span>筛选</span><input data-node-search type="search" value="' + attr(nodeQuery) + '" autocomplete="off" spellcheck="false" placeholder="VPS / 地区 / ASN / 回程"></label>' +
+        '</div>' +
         '<div class="views">' +
           '<button class="icon-btn' + (r.view === "list" ? " is-on" : "") + '" data-view="list" type="button" aria-label="横向排列" title="横向">' + iconList() + "</button>" +
           '<button class="icon-btn' + (r.view === "grid" ? " is-on" : "") + '" data-view="grid" type="button" aria-label="网格排列" title="网格">' + iconGrid() + "</button>" +
@@ -6088,7 +6450,7 @@ window.ProbeConfig = {
 
   function renderGrid(r) {
     const items = listedServers(false, true);
-    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + (items.length
+    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + anomalyNotice() + (items.length
       ? '<section class="board" aria-label="网格排列">' + items.map(function (item) {
         return card(item.s, item.i);
       }).join("") + "</section>"
@@ -6097,16 +6459,37 @@ window.ProbeConfig = {
 
   function renderColumn(r) {
     const items = listedServers(false, true);
-    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + '<section class="stack" aria-label="列排列">' + items.map(function (item) {
+    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + anomalyNotice() + (items.length ? '<section class="stack" aria-label="列排列">' + items.map(function (item) {
       return slab(item.s, item.i);
-    }).join("") + "</section>" + cycleBlock();
+    }).join("") + "</section>" : listEmpty()) + cycleBlock();
   }
 
   function renderList(r) {
     const items = listedServers(true, true);
-    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + '<section class="list" aria-label="横向排列">' + listHead() + items.map(function (item) {
+    main.innerHTML = fleetStrip() + globePanel() + listToolbar(r) + anomalyNotice() + (items.length ? '<section class="list" aria-label="横向排列">' + listHead() + items.map(function (item) {
       return row(item.s, item.i);
-    }).join("") + "</section>" + cycleBlock();
+    }).join("") + "</section>" : listEmpty()) + cycleBlock();
+  }
+
+  function seriesGet(key) {
+    const value = seriesCache[key];
+    if (!value) return value;
+    const pos = seriesCacheOrder.indexOf(key);
+    if (pos >= 0) seriesCacheOrder.splice(pos, 1);
+    seriesCacheOrder.push(key);
+    return value;
+  }
+
+  function seriesPut(key, value) {
+    if (!value) return;
+    seriesCache[key] = value;
+    const pos = seriesCacheOrder.indexOf(key);
+    if (pos >= 0) seriesCacheOrder.splice(pos, 1);
+    seriesCacheOrder.push(key);
+    while (seriesCacheOrder.length > SERIES_CACHE_MAX) {
+      const old = seriesCacheOrder.shift();
+      delete seriesCache[old];
+    }
   }
 
   function nodeCtx(index) {
@@ -6115,7 +6498,7 @@ window.ProbeConfig = {
     if ((!targetKey || targetKey === "all") && s.ping && s.ping.length) targetKey = s.ping[0].key;
     const ping = (s.ping || []).find(function (p) { return p.key === targetKey; }) || (s.ping || [])[0] || null;
     const cacheKey = s.uuid + ":" + range + ":" + (targetKey || "all");
-    const cached = seriesCache[cacheKey];
+    const cached = seriesGet(cacheKey);
     let sparkVals = [];
     let multiSeries = [];
     if (cached) {
@@ -6135,7 +6518,7 @@ window.ProbeConfig = {
   function heroMultiSeries(ctx) {
     const s = ctx.s;
     const cacheKey = s.uuid + ":" + range + ":all";
-    const cached = seriesCache[cacheKey];
+    const cached = seriesGet(cacheKey);
     if (cached && cached.seriesByTask && cached.seriesByTask.length) return cached.seriesByTask;
     if (range === "1h") {
       return (s.ping || []).map(function (p) {
@@ -6204,13 +6587,16 @@ window.ProbeConfig = {
 
   function heroLine(s, ping) {
     const ms = ping && ping.current_ms != null ? Math.round(Number(ping.current_ms)) : null;
+    const presence = s.online
+      ? ("在线 " + fmtDays(s.uptime))
+      : (lastSeenText(s) ? ("最后在线 " + lastSeenText(s)) : "最后在线 —");
     return (
       '<header class="hero">' +
         "<div>" +
           '<div class="hero-sub">' +
             (s.online ? "在线" : "离线") + " · " + h(s.region_name || s.region_city || "") +
             (s.provider_name ? " · " + h(s.provider_name) : "") +
-            " · 在线 " + fmtDays(s.uptime) +
+            " · " + h(presence) +
           "</div>" +
         "</div>" +
         '<div class="hero-pulse">' +
@@ -6309,7 +6695,7 @@ window.ProbeConfig = {
     const key = latencyTargetKey || "all";
     const ping = key === "all" ? null : ((s.ping || []).find(function (p) { return p.key === key; }) || (s.ping || [])[0] || null);
     const cacheKey = s.uuid + ":" + range + ":" + key;
-    const cached = seriesCache[cacheKey];
+    const cached = seriesGet(cacheKey);
     let sparkVals = [];
     let multiSeries = [];
     if (cached) {
@@ -6369,17 +6755,20 @@ window.ProbeConfig = {
 
   function pageTraffic(ctx) {
     const s = ctx.s;
+    const forecast = trafficForecast(s);
+    const sourceLabel = s.traffic_source === 'metric_period' ? 'Metric Store · 当前账期' : s.traffic_source === 'record_period' ? '历史记录差分 · 当前账期' : '当前账期数据不可用';
     return (
       '<article class="page page-traffic">' +
-        '<div style="margin:0 0 16px">' + quotaBar(s) + "</div>" +
+        '<div style="margin:0 0 10px">' + quotaBar(s) + "</div>" +
+        '<div class="traffic-forecast' + (forecast && forecast.kind === 'bad' ? ' is-bad' : forecast && forecast.kind === 'good' ? ' is-good' : '') + '"><span>流量预测</span><b>' + h(forecast ? forecast.text : '暂无额度或历史数据') + '</b><small>' + h(sourceLabel) + '</small></div>' +
         '<section class="kpi">' +
           '<article><div class="lbl">已用</div><div class="val">' + fmtBytes(s.traffic_used, 1) + '</div><div class="sub">' + (s.traffic_limit ? ('限额 ' + fmtBytes(s.traffic_limit, 2)) : '无限额') + "</div></article>" +
-          '<article><div class="lbl">上行累计</div><div class="val">' + fmtBytes(s.traffic_used_up, 1) + '</div><div class="sub">Komari totalUp</div></article>' +
-          '<article><div class="lbl">下行累计</div><div class="val">' + fmtBytes(s.traffic_used_down, 1) + '</div><div class="sub">Komari totalDown</div></article>' +
+          '<article><div class="lbl">本账期上行</div><div class="val">' + fmtBytes(s.traffic_used_up, 1) + '</div><div class="sub">' + h(sourceLabel) + '</div></article>' +
+          '<article><div class="lbl">本账期下行</div><div class="val">' + fmtBytes(s.traffic_used_down, 1) + '</div><div class="sub">' + h(sourceLabel) + '</div></article>' +
           '<article><div class="lbl">最高日</div><div class="val">' + (ctx.last7.length ? fmtBytes(ctx.st.high, 1) : '—') + '</div><div class="sub">日均 ' + (ctx.last7.length ? fmtBytes(ctx.st.avg, 1) : '—') + "</div></article>" +
-          '<article><div class="lbl">账期提示</div><div class="val">' + h((s.period_start || '').slice(5) || '—') + '</div><div class="sub">至 ' + h((s.period_end || '').slice(5) || '—') + "</div></article>" +
+          '<article><div class="lbl">账期</div><div class="val">' + h((s.period_start || '').slice(5) || '—') + '</div><div class="sub">至 ' + h((s.period_end || '').slice(5) || '—') + "</div></article>" +
         "</section>" +
-        '<div class="chart-fill"><div class="panel-h"><h3>近 7 日流量</h3><span class="hero-sub">由 Komari network total 记录差分</span></div>' +
+        '<div class="chart-fill"><div class="panel-h"><h3>近 7 日流量</h3><span class="hero-sub">' + h(sourceLabel) + "</span></div>" +
           trafficHistoryHTML(ctx, 960, 220) +
         "</div>" +
         (ctx.last7.length ? '<section class="day-grid">' +
@@ -6510,8 +6899,10 @@ window.ProbeConfig = {
       const ll = serverLL(s, i) || [80, 30];
       const p = ortho(ll[0], ll[1]);
       if (!p) return;
-      const label = displayCountry(s) + " · " + s.name;
-      items.push({ i: i, key: s.uuid || String(i), s: s, px: p.x, py: p.y, label: label, w: labelWidth(label) });
+      const loc = displayCountry(s);
+      const leftLabel = (s.name || "未命名") + " · " + loc;
+      const rightLabel = loc + " · " + (s.name || "未命名");
+      items.push({ i: i, key: s.uuid || String(i), s: s, px: p.x, py: p.y, leftLabel: leftLabel, rightLabel: rightLabel, w: Math.max(labelWidth(leftLabel), labelWidth(rightLabel)) });
     });
 
     const buckets = {};
@@ -6598,14 +6989,22 @@ window.ProbeConfig = {
     return best;
   }
 
-  function landPathData(ortho) {
-    const rings = WORLD_OUTLINES || [];
+  function landPathData(ortho, profile) {
+    const cfg = profile || globeProfile();
+    const rings = cfg.land === "coarse" ? COARSE_WORLD_OUTLINES : (WORLD_OUTLINES || []);
+    const stride = Math.max(1, Number(cfg.coastStride) || 1);
     let fill = "";
     let stroke = "";
     for (let r = 0; r < rings.length; r += 1) {
-      const ring = rings[r];
+      const raw = rings[r];
+      if (!raw || raw.length < 3) continue;
+      let ring = raw;
+      if (stride > 1 && raw.length > 18) {
+        ring = [];
+        for (let z = 0; z < raw.length; z += stride) ring.push(raw[z]);
+        if (ring.length < 3) ring = raw;
+      }
       const n = ring.length;
-      if (n < 3) continue;
       const vis = new Array(n);
       for (let i = 0; i < n; i += 1) vis[i] = ortho(ring[i][0], ring[i][1]);
       let d = "";
@@ -6633,6 +7032,7 @@ window.ProbeConfig = {
   }
 
   function globeMarkup() {
+    const cfg = globeProfile();
     const cx = 230;
     const cy = 112;
     const R = 92;
@@ -6668,34 +7068,37 @@ window.ProbeConfig = {
       "</radialGradient></defs>" +
       '<circle class="globe-ocean" cx="' + cx + '" cy="' + cy + '" r="' + R + '" />' +
       '<circle class="globe-disk" cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="url(#globe-shade)" stroke="var(--ink)" stroke-width="1.05"/>';
-    const land = landPathData(ortho);
+    const land = landPathData(ortho, cfg);
     if (land.fill) {
       wire += '<path class="globe-land" d="' + land.fill + '" />';
       wire += '<path class="globe-coast" d="' + land.stroke + '" fill="none" />';
     }
-    for (let lon = -180; lon < 180; lon += 30) wire += curve(lon, null, -80, 80, 4);
-    for (let lat = -60; lat <= 60; lat += 30) wire += curve(null, lat, -180, 180, 4);
-    wire += curve(null, 0, -180, 180, 3).replace('stroke-width="0.9"', 'stroke-width="1.15"');
-    const sweepLon = ((Date.now() / 28) % 360) - 180;
-    const sweepBase = currentTheme() === "light" ? 0.52 : 0.42;
-    for (let k = 0; k < 6; k += 1) {
-      const lon = sweepLon - k * 8;
-      const sweep = curve(lon, null, -80, 80, 3);
-      if (sweep) {
-        wire += sweep
-          .replace('class="globe-wire"', 'class="globe-sweep"')
-          .replace('stroke-width="0.9"', 'stroke-width="' + (k === 0 ? 1.6 : 1.1) + '" style="stroke-opacity:' + (sweepBase - k * 0.06).toFixed(2) + '"');
+    for (let lon = -180; lon < 180; lon += cfg.gridLon) wire += curve(lon, null, -80, 80, cfg.curveStep);
+    for (let lat = -60; lat <= 60; lat += cfg.gridLat) wire += curve(null, lat, -180, 180, cfg.curveStep);
+    wire += curve(null, 0, -180, 180, Math.max(3, cfg.curveStep - 1)).replace('stroke-width="0.9"', 'stroke-width="1.15"');
+    if (cfg.sweepCount > 0) {
+      const sweepLon = ((Date.now() / 28) % 360) - 180;
+      const sweepBase = currentTheme() === "light" ? 0.52 : 0.42;
+      for (let k = 0; k < cfg.sweepCount; k += 1) {
+        const lon = sweepLon - k * 8;
+        const sweep = curve(lon, null, -80, 80, Math.max(3, cfg.curveStep - 1));
+        if (sweep) {
+          wire += sweep
+            .replace('class="globe-wire"', 'class="globe-sweep"')
+            .replace('stroke-width="0.9"', 'stroke-width="' + (k === 0 ? 1.6 : 1.1) + '" style="stroke-opacity:' + (sweepBase - k * 0.06).toFixed(2) + '"');
+        }
       }
     }
     wire += '<line class="globe-base" x1="110" y1="' + (cy + R + 16) + '" x2="350" y2="' + (cy + R + 16) + '" stroke-width="1"/>';
     const laid = layoutGlobeLabels(cx, ortho);
     let links = "";
     const online = laid.filter(function (n) { return n.s.online; });
-    online.forEach(function (a, i) {
+    if (cfg.linkMode > 0) online.forEach(function (a, i) {
       online.forEach(function (b, j) {
         if (j <= i) return;
         if ((a.s.geo_country || a.s.region_country || "") === (b.s.geo_country || b.s.region_country || "")) return;
-        if ((a.i * 7 + b.i * 3) % 4 !== 1) return;
+        const divisor = cfg.linkMode > 1 ? 4 : 8;
+        if ((a.i * 7 + b.i * 3) % divisor !== 1) return;
         const mx = (a.px + b.px) / 2;
         const my = (a.py + b.py) / 2;
         const qx = cx + (mx - cx) * 0.42;
@@ -6705,17 +7108,18 @@ window.ProbeConfig = {
     });
     const pins = laid.map(function (n) {
       const tx = n.end ? n.lx - 3 : n.lx + 3;
+      const label = n.end ? n.leftLabel : n.rightLabel;
       return (
         '<g class="globe-node">' +
           '<path d="M ' + n.px.toFixed(1) + " " + n.py.toFixed(1) + " L " + n.lx.toFixed(1) + " " + n.ly.toFixed(1) + '" fill="none" stroke="var(--ink)" stroke-width="0.75"/>' +
           '<circle cx="' + n.px.toFixed(1) + '" cy="' + n.py.toFixed(1) + '" r="2.1" fill="none" stroke="' + pingColor(n.s) + '" stroke-width="1.15"/>' +
-          '<text x="' + tx.toFixed(1) + '" y="' + (n.ly + 3).toFixed(1) + '" text-anchor="' + (n.end ? "end" : "start") + '" fill="var(--ink-soft)" font-size="8.5" font-family="IBM Plex Mono, monospace" stroke="var(--void)" stroke-width="3" paint-order="stroke" stroke-linejoin="round">' + h(n.label) + "</text>" +
+          '<text x="' + tx.toFixed(1) + '" y="' + (n.ly + 3).toFixed(1) + '" text-anchor="' + (n.end ? "end" : "start") + '" fill="var(--ink-soft)" font-size="8.5" font-family="IBM Plex Mono, monospace" stroke="var(--void)" stroke-width="3" paint-order="stroke" stroke-linejoin="round">' + h(label) + "</text>" +
           '<circle class="hit" cx="' + n.px.toFixed(1) + '" cy="' + n.py.toFixed(1) + '" r="9" fill="transparent" data-index="' + attr(n.key) + '"/>' +
         "</g>"
       );
     }).join("");
     return wire + links + pins +
-      '<text class="globe-caption" x="230" y="' + (cy + R + 28) + '" text-anchor="middle" font-size="8" font-family="IBM Plex Mono, monospace" letter-spacing="1.4">' + globeCaption() + "</text>";
+      '<text class="globe-caption" x="230" y="' + (cy + R + 28) + '" text-anchor="middle" font-size="8" font-family="IBM Plex Mono, monospace" letter-spacing="1.4">' + globeCaption() + " · " + cfg.key.toUpperCase() + "</text>";
   }
 
   function globePanel() {
@@ -6749,6 +7153,14 @@ window.ProbeConfig = {
     if (svg) svg.innerHTML = globeMarkup();
   }
 
+  function queueGlobePaint() {
+    if (globePaintRAF) return;
+    globePaintRAF = requestAnimationFrame(function () {
+      globePaintRAF = 0;
+      paintGlobe();
+    });
+  }
+
   function onGlobeDown(ev) {
     const atlas = ev.target.closest(".atlas");
     if (!atlas || ev.button) return;
@@ -6773,7 +7185,7 @@ window.ProbeConfig = {
     ev.preventDefault();
     globeLon = wrapLon(globeDrag.lon - dx * 0.48);
     globeLat = Math.max(-78, Math.min(78, globeDrag.lat + dy * 0.36));
-    paintGlobe();
+    queueGlobePaint();
   }
 
   function onGlobeUp(ev) {
@@ -6785,6 +7197,7 @@ window.ProbeConfig = {
     }
     if (globeDrag.moved) globeSkipClick = true;
     globeDrag = null;
+    queueGlobePaint();
   }
 
   function hideWindow() {
@@ -6809,7 +7222,7 @@ window.ProbeConfig = {
     const lossValues = chosen ? (chosen.loss_pct == null ? [] : [Number(chosen.loss_pct)]) : targets.map(function (p) { return p.loss_pct == null ? null : Number(p.loss_pct); }).filter(Number.isFinite);
     const avgLoss = lossValues.length ? lossValues.reduce(function (a, b) { return a + b; }, 0) / lossValues.length : null;
     const cacheKey = s.uuid + ":" + range + ":" + (netTarget || "all");
-    const cached = seriesCache[cacheKey] || null;
+    const cached = seriesGet(cacheKey) || null;
     let chart = '';
     if (netTarget === 'all' && cached && cached.seriesByTask && cached.seriesByTask.length > 1) {
       chart = ProbeCharts.multiSpark(cached.seriesByTask, { w: 960, h: 200 });
@@ -6872,8 +7285,9 @@ window.ProbeConfig = {
     const last7 = Object.keys(byDate).sort().slice(-7).map(function (key) { return byDate[key]; });
     const monthGroups = costGroups(servers, false);
     const annualGroups = costGroups(servers, true);
-    const monthCNY = aggregateCNY(servers, false);
-    const annualCNY = aggregateCNY(servers, true);
+    const canSeeFinance = !!accessState.logged_in;
+    const monthCNY = canSeeFinance ? aggregateCNY(servers, false) : null;
+    const annualCNY = canSeeFinance ? aggregateCNY(servers, true) : null;
     const fxLabel = state._fx_source ? (state._fx_source === 'cache' ? '汇率缓存' : state._fx_source === 'stale-cache' ? '旧汇率缓存' : state._fx_source === 'default' ? '备用汇率' : state._fx_source) : '汇率加载中';
     const ranked = servers.filter(function (s) { return Number(s.traffic_limit || 0) > 0 && s.traffic_used != null; }).slice().sort(function (a, b) {
       return pct(b.traffic_used, b.traffic_limit) - pct(a.traffic_used, a.traffic_limit);
@@ -6884,8 +7298,8 @@ window.ProbeConfig = {
     const on = function (key) { return !liveMode || state[key] !== false; };
     let body = '<section class="subpage"><p class="lead">' + t.online + "/" + t.all + " 台在线。费用按 Komari 原生 price / billing_cycle 折算；汇率使用每日缓存的公开 CNY 基准数据，并保留原币种明细。</p>";
     body += '<section class="kpi">' +
-      "<article><div class='lbl'>月均成本</div><div class='val cost-value'>" + (monthCNY == null ? '—' : ('≈ ¥' + monthCNY.toFixed(2))) + "</div><div class='sub'>" + h(fxLabel) + " · 原币种 " + costGroupsHTML(monthGroups) + "</div></article>" +
-      "<article><div class='lbl'>年化预算</div><div class='val cost-value'>" + (annualCNY == null ? '—' : ('≈ ¥' + annualCNY.toFixed(2))) + "</div><div class='sub'>按 365.25 天 · 原币种 " + costGroupsHTML(annualGroups) + "</div></article>" +
+      "<article><div class='lbl'>月均成本</div><div class='val cost-value'>" + (!accessState.known ? '…' : !canSeeFinance ? '*' : monthCNY == null ? '—' : ('≈ ¥' + monthCNY.toFixed(2))) + "</div><div class='sub'>" + (!accessState.known ? '正在确认权限' : !canSeeFinance ? '登录后可见' : (h(fxLabel) + " · 原币种 " + costGroupsHTML(monthGroups))) + "</div></article>" +
+      "<article><div class='lbl'>年化预算</div><div class='val cost-value'>" + (!accessState.known ? '…' : !canSeeFinance ? '*' : annualCNY == null ? '—' : ('≈ ¥' + annualCNY.toFixed(2))) + "</div><div class='sub'>" + (!accessState.known ? '正在确认权限' : !canSeeFinance ? '登录后可见' : ('按 365.25 天 · 原币种 ' + costGroupsHTML(annualGroups))) + "</div></article>" +
       "<article><div class='lbl'>流量累计</div><div class='val'>" + fmtBytes(t.used, 1) + "</div><div class='sub'>限额 " + fmtBytes(t.limit, 2) + "</div></article>" +
       "<article><div class='lbl'>有限额</div><div class='val'>" + servers.filter(function (s) { return s.traffic_limit; }).length + "</div><div class='sub'>台服务器</div></article></section>";
     if (on("show_traffic_7d") || on("show_traffic_quota")) {
@@ -6918,7 +7332,7 @@ window.ProbeConfig = {
       body += '<div class="panel" style="margin-top:16px"><div class="panel-h"><h3>续费与到期</h3><span class="hero-sub">按到期日</span></div><div class="timeline">' +
         (soon.length ? soon.map(function (s) {
           const days = Math.max(0, Math.round((new Date(s.expires_at_raw) - new Date()) / 86400000));
-          return "<article><div>" + h(s.expires_at || "—") + "</div><b>" + h(s.name) + "</b>" + days + " 天后　" + h(renewalText(s)) + "</article>";
+          return "<article><div>" + h(s.expires_at || "—") + "</div><b>" + h(s.name) + "</b>" + days + " 天后　" + h(canSeeFinance ? renewalText(s) : "*") + "</article>";
         }).join("") : '<div class="hero-sub">暂无可用的到期日期</div>') + "</div></div>";
     }
     main.innerHTML = body + "</section>" + cycleBlock();
@@ -7015,6 +7429,20 @@ window.ProbeConfig = {
       }
       return;
     }
+    const anomalyBtn = ev.target.closest("[data-anomaly-filter]");
+    if (anomalyBtn) {
+      anomalyFilter = !anomalyFilter;
+      render();
+      return;
+    }
+    const clearFilters = ev.target.closest("[data-clear-filters]");
+    if (clearFilters) {
+      anomalyFilter = false;
+      nodeQuery = "";
+      regionFilter = "";
+      render();
+      return;
+    }
     const financeBtn = ev.target.closest("[data-finance-detail]");
     if (financeBtn) {
       openFinanceDetail();
@@ -7062,6 +7490,24 @@ window.ProbeConfig = {
     const item = ev.target.closest("[data-index]");
     if (!item) return;
     openNode(item.getAttribute("data-index"));
+  }
+
+  let searchRenderTimer = 0;
+  function onMainInput(ev) {
+    const input = ev.target.closest && ev.target.closest('[data-node-search]');
+    if (!input) return;
+    nodeQuery = input.value || '';
+    clearTimeout(searchRenderTimer);
+    const caret = input.selectionStart == null ? nodeQuery.length : input.selectionStart;
+    searchRenderTimer = setTimeout(function () {
+      render();
+      requestAnimationFrame(function () {
+        const next = main.querySelector('[data-node-search]');
+        if (!next) return;
+        next.focus({ preventScroll: true });
+        try { next.setSelectionRange(caret, caret); } catch (e) {}
+      });
+    }, 60);
   }
 
   function onWindowClick(ev) {
@@ -7240,6 +7686,7 @@ window.ProbeConfig = {
   overlay.addEventListener("click", onWindowClick);
   overlay.addEventListener("change", onWindowChange);
   main.addEventListener("click", onMainClick);
+  main.addEventListener("input", onMainInput);
   main.addEventListener("pointerdown", onGlobeDown);
   main.addEventListener("pointermove", onGlobeMove);
   main.addEventListener("pointerup", onGlobeUp);
@@ -7248,12 +7695,12 @@ window.ProbeConfig = {
     if (!ev.target.closest(".atlas")) return;
     globeLon = 80;
     globeLat = 30;
-    paintGlobe();
+    queueGlobePaint();
   });
   window.addEventListener("hashchange", render);
   window.addEventListener("keydown", onKey);
   document.addEventListener("mmwx-fx", function () {
-    if (main.querySelector(".atlas svg")) paintGlobe();
+    if (main.querySelector(".atlas svg")) queueGlobePaint();
   });
 
   function rebuildPulse() {
@@ -7270,8 +7717,10 @@ window.ProbeConfig = {
         }
       });
     });
-    const first = servers[0];
-    const start = first && first.period_start ? new Date(first.period_start + "T00:00:00") : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    // Month pulse is a calendar-month visualization. Per-node billing reset days
+    // only affect traffic-period quota accounting, never the calendar axis here.
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
     const rows = [];
     let acc = 0;
@@ -7292,6 +7741,32 @@ window.ProbeConfig = {
     pulse = rows.length ? rows : ProbeDemo.monthPulse(servers);
   }
 
+  function nodeMarkup(view, item) {
+    if (view === 'column') return slab(item.s, item.i);
+    if (view === 'grid') return card(item.s, item.i);
+    return row(item.s, item.i);
+  }
+
+  function patchNodeCollection(view, items) {
+    const host = main.querySelector(view === 'column' ? '.stack' : view === 'grid' ? '.board' : '.list');
+    if (!host) return false;
+    const existing = Array.prototype.filter.call(host.children, function (el) { return el && el.hasAttribute && el.hasAttribute('data-index'); });
+    const current = existing.map(function (el) { return el.getAttribute('data-index'); }).join('|');
+    const expected = items.map(function (item) { return String(item.i); }).join('|');
+    if (current !== expected) {
+      host.innerHTML = (view === 'list' ? listHead() : '') + items.map(function (item) { return nodeMarkup(view, item); }).join('');
+      return true;
+    }
+    existing.forEach(function (el, idx) {
+      const item = items[idx];
+      if (!item) return;
+      const sig = liveSignature(item.s);
+      if (el.getAttribute('data-live-sig') === sig) return;
+      el.outerHTML = nodeMarkup(view, item);
+    });
+    return true;
+  }
+
   function patchLiveUI() {
     const r = route();
     renderFoot();
@@ -7299,16 +7774,13 @@ window.ProbeConfig = {
       const fleet = main.querySelector(".fleet");
       if (fleet) fleet.outerHTML = fleetStrip();
       const items = listedServers(r.view === "list", true);
-      if (r.view === "column") {
-        const stack = main.querySelector(".stack");
-        if (stack) stack.innerHTML = items.map(function (item) { return slab(item.s, item.i); }).join("");
-      } else if (r.view === "list") {
-        const list = main.querySelector(".list");
-        if (list) list.innerHTML = listHead() + items.map(function (item) { return row(item.s, item.i); }).join("");
-      } else {
-        const board = main.querySelector(".board");
-        if (board) board.innerHTML = items.map(function (item) { return card(item.s, item.i); }).join("");
-      }
+      if (!patchNodeCollection(r.view || 'list', items)) renderBoard(r);
+      const count = main.querySelector('[data-anomaly-count]');
+      if (count) count.textContent = String(anomalySummary().total);
+      const notice = main.querySelector('.filter-notice');
+      if (notice && (anomalyFilter || nodeQuery)) notice.outerHTML = anomalyNotice();
+      globeLiveTick += 1;
+      if (showGlobe && globeLiveTick % 6 === 0 && main.querySelector('.atlas svg')) queueGlobePaint();
     } else {
       subpageLiveTick += 1;
       if (subpageLiveTick % 3 === 0) renderBoard(r);
@@ -7325,6 +7797,7 @@ window.ProbeConfig = {
       return;
     }
     state = payload;
+    globeQuality = normalizeGlobeQuality(state.globe_quality || "medium");
     state._loading = false;
     state._error = "";
     liveMode = true;
@@ -7352,7 +7825,7 @@ window.ProbeConfig = {
     const t = tgt !== undefined ? tgt : (targetKey || "all");
     const key = String(index) + ":" + range + ":" + (t || "all");
     return ProbeAPI.fetchSeries(index, range, t || "all").then(function (payload) {
-      if (payload) seriesCache[key] = payload;
+      if (payload) seriesPut(key, payload);
       return payload;
     }).catch(function () { return null; });
   }
@@ -7438,15 +7911,20 @@ window.ProbeConfig = {
     let last = 0;
     function frame(t) {
       requestAnimationFrame(frame);
-      if (t - last < 70) return;
+      const cfg = globeProfile();
+      if (last && t - last < cfg.idleMs) return;
+      const dt = last ? Math.min(1000, t - last) : cfg.idleMs;
       last = t;
       if (!showGlobe || globeDrag || document.hidden) return;
       if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       if (route().home !== "nodes") return;
       if (overlay && !overlay.hidden) return;
-      if (!main.querySelector(".atlas svg")) return;
-      globeLon = wrapLon(globeLon + 0.18);
-      paintGlobe();
+      const atlas = main.querySelector(".atlas");
+      if (!atlas || !atlas.querySelector('svg')) return;
+      const rect = atlas.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+      globeLon = wrapLon(globeLon + dt * 0.00255);
+      queueGlobePaint();
     }
     requestAnimationFrame(frame);
   })();
@@ -7462,14 +7940,15 @@ window.ProbeConfig = {
       const accessUuid = payload.servers && payload.servers[0] && payload.servers[0].uuid;
       ProbeAPI.fetchAccess(accessUuid).then(function (nextAccess) {
         accessState = nextAccess || accessState;
-        const r = route();
-        if (r.node != null) renderWindow(r.node, r.page);
+        const y = window.scrollY;
+        render();
+        window.scrollTo(0, y);
       }).catch(function () {});
       ProbeAPI.connectWS(applyLive);
       if (ProbeAPI.enrich) ProbeAPI.enrich(payload).then(function (next) { if (next) applyLive(next, { kind: 'enrichment' }); }).catch(function () {});
       Promise.allSettled([
         ProbeAPI.fetchPingOverview().then(function (next) { if (next) applyLive(next); }),
-        ProbeAPI.fetchTrafficHistory(168).then(function (next) { if (next) applyLive(next); }),
+        ProbeAPI.fetchTrafficHistory().then(function (next) { if (next) applyLive(next); }),
       ]);
     }).catch(function (err) {
       state = { enabled: true, title: "节点状态", servers: [], _loading: false, _error: err && err.message ? err.message : String(err), _source: "komari-rpc2" };
@@ -7478,6 +7957,7 @@ window.ProbeConfig = {
     });
   }
 })();
+
 </script>
 </body>
 </html>

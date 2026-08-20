@@ -1,14 +1,19 @@
 # Komari Line Grid
 
-将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari Monitor，并使用 Komari 当前 RPC2 / Metric Store 数据接口。当前仓库包含可直接导入的 v0.3.13 构建产物。
+将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari Monitor，并使用 Komari 当前 RPC2 / Metric Store 数据接口。当前仓库包含可直接导入的 v0.4.2 构建产物。
 
-## v0.3.13
+## v0.4.2
 
-v0.3.13 延续上游 line-grid 的布局节奏，同时补齐 Komari 场景下的数据、移动端和管理功能：
+v0.4.2 延续上游 line-grid 的布局节奏，并在 v0.4.0 的稳定性重构基础上补齐 Komari 场景下的数据、移动端和管理功能：
 
 - 桌面端和移动端自适应布局，包含节点列表、详情、网络和资源视图
 - 使用 RPC2 / Metric Store 展示实时状态、Ping 历史与流量账期
+- 当前账期流量与节点 lifetime 网络计数分离，并按每台 VPS 的账期边界汇总历史
+- 首页支持节点搜索、异常快速筛选、流量耗尽预测和离线节点 Last Seen
+- 地球支持 Low / Medium / High 三档固定渲染精度，避免运行时自动切换造成闪烁
+- 地球拖动、空闲旋转和页面不可见状态经过性能优化，实时刷新使用节点级增量更新
 - 支持节点地区、城市、经纬度、服务商、回程线路等 UUID 元数据
+- 管理端提供每节点流量重置日编辑器
 - 节点列表支持排序、地区筛选、延迟等级和离线状态展示
 - 财务信息按币种安全聚合，并支持账期重置日与续费提醒
 - 离线且没有最新报告的节点显示 `—`，不再伪装成 CPU/RAM/Disk 0%
@@ -51,6 +56,8 @@ preview.svg
 dist/
   index.html
   css/app.css
+  img/grain.png
+  admin-reset-editor.html
   js/*.js
   metadata/nodes.json
 ```
@@ -87,7 +94,7 @@ dist/metadata/nodes.json
 - 近 7 日上下行
 - 本月脉搏
 
-可展示时长取决于 Komari Metric Store / rollup 的保留策略。`traffic_reset_day` 默认每月 1 日，可按节点设置 1–28 日。
+可展示时长取决于 Komari Metric Store / rollup 的保留策略。`traffic_reset_day` 默认每月 1 日，可按节点设置 1–31 日；目标月份没有对应日期时按当月最后一天处理。
 
 如果 Metric Store 查询失败，主题会明确显示“暂不可用”，不会把缺失数据当作 `0 B`。
 

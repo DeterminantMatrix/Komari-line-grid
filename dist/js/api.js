@@ -79,39 +79,54 @@
 
   function fetchTrafficHistory(hours) {
     if (!lastPayload) return Promise.resolve(null);
-    const windowHours = Math.max(24, Number(hours) || 168);
+    const now = Date.now();
+    let requiredHours = 168;
+    (lastPayload.servers || []).forEach(function (server) {
+      if (!server || !server.period_start) return;
+      const start = new Date(String(server.period_start).slice(0, 10) + 'T00:00:00').getTime();
+      if (!Number.isFinite(start)) return;
+      requiredHours = Math.max(requiredHours, Math.ceil((now - start) / 3600000) + 48);
+    });
+    // A monthly cycle never needs more than ~33 days; cap the initial history
+    // request so one unusual date cannot make the public page download months of metrics.
+    const windowHours = Math.min(840, Math.max(168, Number(hours) || 0, requiredHours));
     const days = Math.ceil(windowHours / 24);
     const uuids = (lastPayload.servers || []).map(function (s) { return s.uuid; }).filter(Boolean);
 
-    function metricFallback() {
-      if (!uuids.length || !KomariAdapt.mergeMetricTraffic) return Promise.resolve(lastPayload);
+    function metricPrimary() {
+      if (!uuids.length || !KomariAdapt.mergeMetricTraffic) return Promise.resolve(false);
       return rpc('public:queryMetrics', {
         metric_keys: ['traffic.up', 'traffic.down'],
         entity_ids: uuids,
         hours: windowHours,
         aggregation: 'sum',
         fill_empty: false,
-        max_points: Math.max(168, days * 48),
-      }, 15000).then(function (raw) {
+        max_points: Math.min(1200, Math.max(336, days * 24 + 24)),
+      }, 18000).then(function (raw) {
         KomariAdapt.mergeMetricTraffic(lastPayload, raw, days);
-        return lastPayload;
-      }).catch(function () { return lastPayload; });
+        return (lastPayload.servers || []).some(function (s) { return s.traffic_source === 'metric_period'; });
+      }).catch(function () { return false; });
     }
 
-    return rpc('common:getRecords', { type: 'load', uuid: '', hours: windowHours, maxCount: 12000 }, 15000)
-      .then(function (raw) {
-        KomariAdapt.mergeTrafficHistory(lastPayload, raw, days);
-        return metricFallback();
-      }).catch(function () {
-        return metricFallback();
-      }).then(function () {
-        const any = (lastPayload.servers || []).some(function (s) { return s.daily_traffic && s.daily_traffic.length; });
-        lastPayload._traffic_history_status = any ? 'ok' : 'unavailable';
-        (lastPayload.servers || []).forEach(function (s) {
-          if (!s.daily_traffic || !s.daily_traffic.length) s.traffic_history_status = 'unavailable';
-        });
-        return lastPayload;
+    function recordFallback() {
+      return rpc('common:getRecords', { type: 'load', uuid: '', hours: windowHours, maxCount: 30000 }, 18000)
+        .then(function (raw) {
+          KomariAdapt.mergeTrafficHistory(lastPayload, raw, days);
+          return true;
+        }).catch(function () { return false; });
+    }
+
+    return metricPrimary().then(function () {
+      const missing = (lastPayload.servers || []).some(function (s) { return s.traffic_used == null; });
+      return missing ? recordFallback() : true;
+    }).then(function () {
+      const any = (lastPayload.servers || []).some(function (s) { return s.daily_traffic && s.daily_traffic.length; });
+      lastPayload._traffic_history_status = any ? 'ok' : 'unavailable';
+      (lastPayload.servers || []).forEach(function (s) {
+        if (!s.daily_traffic || !s.daily_traffic.length) s.traffic_history_status = 'unavailable';
       });
+      return lastPayload;
+    });
   }
 
   function fetchSeries(uuid, range, target) {

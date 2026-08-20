@@ -72,6 +72,7 @@
     block_login: false,
     show_name: true,
     show_globe: false,
+    globe_quality: "medium",
     license_badge: { name: "mmwx", display_name: "妙妙屋X" },
     servers: [
       {

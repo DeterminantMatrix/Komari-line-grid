@@ -241,6 +241,7 @@
     const country = flagToIso(ext.region_country || node.region || node.country || node.iso || '');
     const totalUp = hasLive ? firstNumber(live, ['net_total_out', 'net_total_up', 'network.totalUp', 'net.totalUp']) : null;
     const totalDown = hasLive ? firstNumber(live, ['net_total_in', 'net_total_down', 'network.totalDown', 'net.totalDown']) : null;
+    const liveSeenAt = hasLive ? parseTime(firstValue(live, ['time', 'updated_at', 'timestamp', 'created_at'])) : null;
     const trafficType = String(node.traffic_limit_type || 'sum');
     const expiry = normalizeExpiry(node.expired_at);
     const price = numberOrNull(node.price);
@@ -263,6 +264,7 @@
       name: String(node.name || node.Name || '未命名'),
       online: hasLive ? live.online === true : false,
       has_live: hasLive,
+      last_seen_at: liveSeenAt != null ? liveSeenAt : (hasLive && live.online === true ? Date.now() : null),
       region_country: country,
       geo_country: country,
       region_name: String(ext.region_name || node.group || node.region || country || ''),
@@ -289,12 +291,21 @@
       connections_tcp: hasLive ? firstNumber(live, ['connections']) : null,
       connections_udp: hasLive ? firstNumber(live, ['connections_udp']) : null,
 
-      traffic_used_up: totalUp,
-      traffic_used_down: totalDown,
-      traffic_used: calcTraffic(totalUp, totalDown, trafficType),
+      // Live net_total counters are lifetime/session counters, not a billing-period total.
+      // Keep them separate so the UI never silently treats lifetime traffic as the current cycle.
+      traffic_lifetime_up: totalUp,
+      traffic_lifetime_down: totalDown,
+      traffic_lifetime: calcTraffic(totalUp, totalDown, trafficType),
+      traffic_period_up: null,
+      traffic_period_down: null,
+      traffic_period: null,
+      traffic_used_up: null,
+      traffic_used_down: null,
+      traffic_used: null,
       traffic_limit: numberOr(node.traffic_limit, 0),
       traffic_limit_type: trafficType,
-      traffic_source: totalUp != null || totalDown != null ? 'live_total' : null,
+      traffic_source: null,
+      traffic_period_complete: false,
       traffic_history_status: 'loading',
       traffic_history_days: 0,
       daily_traffic: [],
@@ -366,6 +377,7 @@
       title: String(metaGlobal.title || pub.sitename || pub.site_name || pub.name || '节点状态'),
       appearance: { theme: 'line-grid', color_mode: 'dark' },
       show_globe: metaGlobal.show_globe !== false && settings.showGlobe !== false,
+      globe_quality: (function () { const q = String(metaGlobal.globe_quality || settings.globeQuality || 'Medium').toLowerCase(); return q === 'low' || q === 'high' ? q : 'medium'; })(),
       offline_server_position: String(metaGlobal.offline_server_position || settings.offlineServerPosition || 'Last'),
       enable_ip_geo_asn: [true, 1, '1', 'true', 'on'].indexOf(metaGlobal.enable_ip_geo_asn) >= 0 || [true, 1, '1', 'true', 'on'].indexOf(settings.enableIpGeoAsn) >= 0,
       servers: servers,
@@ -380,6 +392,11 @@
     const hasLive = !!(live && typeof live === 'object');
     server.has_live = hasLive;
     server.online = hasLive ? live.online === true : false;
+    if (hasLive) {
+      const seen = parseTime(firstValue(live, ['time', 'updated_at', 'timestamp', 'created_at']));
+      if (seen != null) server.last_seen_at = seen;
+      else if (live.online === true) server.last_seen_at = Date.now();
+    }
     if (!hasLive) {
       server.cpu_pct = null;
       server.mem_used = null;
@@ -408,10 +425,9 @@
     const up = firstNumber(live, ['net_total_out', 'net_total_up', 'network.totalUp', 'net.totalUp']);
     const down = firstNumber(live, ['net_total_in', 'net_total_down', 'network.totalDown', 'net.totalDown']);
     if (up != null || down != null) {
-      server.traffic_used_up = up;
-      server.traffic_used_down = down;
-      server.traffic_used = calcTraffic(up, down, server.traffic_limit_type);
-      server.traffic_source = 'live_total';
+      server.traffic_lifetime_up = up;
+      server.traffic_lifetime_down = down;
+      server.traffic_lifetime = calcTraffic(up, down, server.traffic_limit_type);
     }
     server.ping = mapLivePing(live.ping, server.ping);
   }
@@ -550,6 +566,33 @@
     });
   }
 
+  function applyPeriodTraffic(server, daily, source) {
+    const start = server && server.period_start ? new Date(server.period_start + 'T00:00:00').getTime() : NaN;
+    const end = server && server.period_end ? new Date(server.period_end + 'T00:00:00').getTime() : NaN;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || !Array.isArray(daily) || !daily.length) return false;
+    const rows = daily.filter(function (row) {
+      const t = new Date(String(row.date || '') + 'T00:00:00').getTime();
+      return Number.isFinite(t) && t >= start && t < end;
+    });
+    if (!rows.length) return false;
+    const up = rows.reduce(function (n, d) { return n + numberOr(d.uplink, 0); }, 0);
+    const down = rows.reduce(function (n, d) { return n + numberOr(d.downlink, 0); }, 0);
+    server.traffic_period_up = up;
+    server.traffic_period_down = down;
+    server.traffic_period = calcTraffic(up, down, server.traffic_limit_type);
+    // Compatibility alias used by the existing UI. In v0.4 this always means current billing period.
+    server.traffic_used_up = up;
+    server.traffic_used_down = down;
+    server.traffic_used = server.traffic_period;
+    server.traffic_source = source;
+    const earliest = rows.reduce(function (min, row) {
+      const t = new Date(String(row.date || '') + 'T00:00:00').getTime();
+      return Number.isFinite(t) ? Math.min(min, t) : min;
+    }, Infinity);
+    server.traffic_period_complete = Number.isFinite(earliest) && earliest <= start + DAY * 1000;
+    return true;
+  }
+
   function mergeTrafficHistory(payload, raw, days) {
     if (!payload || !Array.isArray(payload.servers)) return payload;
     let any = false;
@@ -559,14 +602,9 @@
       server.daily_traffic = daily.slice(-Math.max(7, days || 7));
       server.traffic_history_days = daily.length;
       server.traffic_history_status = daily.length ? 'ok' : 'unavailable';
-      if (daily.length) any = true;
-      if (server.traffic_used == null && daily.length) {
-        const up = daily.reduce(function (n, d) { return n + d.uplink; }, 0);
-        const down = daily.reduce(function (n, d) { return n + d.downlink; }, 0);
-        server.traffic_used_up = up;
-        server.traffic_used_down = down;
-        server.traffic_used = calcTraffic(up, down, server.traffic_limit_type);
-        server.traffic_source = 'history_delta';
+      if (daily.length) {
+        any = true;
+        if (server.traffic_source !== 'metric_period') applyPeriodTraffic(server, daily, 'record_period');
       }
     });
     payload._traffic_history_status = any ? 'ok' : 'unavailable';
@@ -613,25 +651,18 @@
       }).filter(function (row) { return new Date(row.date + 'T00:00:00').getTime() >= cutoff.getTime(); });
       if (!daily.length) return;
       any = true;
-      if (!server.daily_traffic || daily.length > server.daily_traffic.length) {
-        server.daily_traffic = daily.slice(-Math.max(7, days || 7));
-        server.traffic_history_days = daily.length;
-        server.traffic_history_status = 'ok';
-        server.traffic_history_source = 'metric';
-      }
+      // Metric Store is the preferred source. Replace the fallback even when
+      // both contain the same number of days so billing totals stay deterministic.
+      server.daily_traffic = daily.slice(-Math.max(7, days || 7));
+      server.traffic_history_days = daily.length;
+      server.traffic_history_status = 'ok';
+      server.traffic_history_source = 'metric';
+      applyPeriodTraffic(server, daily, 'metric_period');
       const retention = Math.max(
         numberOr(pack['traffic.up'] && pack['traffic.up'].retention_days, 0),
         numberOr(pack['traffic.down'] && pack['traffic.down'].retention_days, 0)
       );
       if (retention) server.traffic_retention_days = retention;
-      if (server.traffic_used == null) {
-        const up = daily.reduce(function (n, d) { return n + d.uplink; }, 0);
-        const down = daily.reduce(function (n, d) { return n + d.downlink; }, 0);
-        server.traffic_used_up = up;
-        server.traffic_used_down = down;
-        server.traffic_used = calcTraffic(up, down, server.traffic_limit_type);
-        server.traffic_source = 'metric_delta';
-      }
     });
     if (any) payload._traffic_history_status = 'ok';
     return payload;
