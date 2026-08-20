@@ -83,7 +83,7 @@
     let requiredHours = 168;
     (lastPayload.servers || []).forEach(function (server) {
       if (!server || !server.period_start) return;
-      const start = new Date(String(server.period_start).slice(0, 10) + 'T00:00:00').getTime();
+      const start = Date.parse(String(server.period_start).slice(0, 10) + 'T00:00:00Z');
       if (!Number.isFinite(start)) return;
       requiredHours = Math.max(requiredHours, Math.ceil((now - start) / 3600000) + 48);
     });
@@ -172,14 +172,19 @@
   }
 
 
-  function enrich(payload) {
+  function enrich(payload, options) {
     if (!payload || !global.LineGridEnrich) return Promise.resolve(payload);
+    options = options || {};
     const tasks = [];
-    tasks.push(LineGridEnrich.getDailyExchangeRates().then(function (fx) {
-      payload._fx_rates = fx && fx.rates || LineGridEnrich.defaultRates;
-      payload._fx_source = fx && fx.source || 'default';
-      payload._fx_updated_at = fx && fx.updatedAt || null;
-    }).catch(function () {}));
+    if (options.loadFx === true) {
+      tasks.push(LineGridEnrich.getDailyExchangeRates().then(function (fx) {
+        payload._fx_rates = fx && fx.rates || LineGridEnrich.defaultRates;
+        payload._fx_source = fx && fx.source || 'default';
+        payload._fx_updated_at = fx && fx.updatedAt || null;
+      }).catch(function () {}));
+    } else {
+      payload._fx_source = payload._fx_source || 'deferred';
+    }
     // Always hydrate the UUID-keyed sanitized city cache. enrichNodes itself
     // only sends a full IP to GeoIP providers when the opt-in switch is on.
     tasks.push(LineGridEnrich.enrichNodes(payload).catch(function () {}));

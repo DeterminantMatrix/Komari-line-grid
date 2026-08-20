@@ -45,6 +45,7 @@
   let globeLiveTick = 0;
   let financeSortKey = "";
   let financeSortDir = 0; // 0=default monthly desc, -1=desc, 1=asc
+  const billingTodayCache = {};
 
   function h(value) {
     return String(value == null ? "" : value)
@@ -792,13 +793,36 @@
     );
   }
 
+  function dateKeyOrdinal(key) {
+    const m = String(key || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000);
+  }
+
+  function todayKeyInZone(timeZone) {
+    const zone = String(timeZone || 'Asia/Shanghai');
+    const minute = Math.floor(Date.now() / 60000);
+    const cached = billingTodayCache[zone];
+    if (cached && cached.minute === minute) return cached.key;
+    let key;
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+      const out = {};
+      parts.forEach(function (part) { if (part.type === 'year' || part.type === 'month' || part.type === 'day') out[part.type] = part.value; });
+      key = out.year + '-' + out.month + '-' + out.day;
+    } catch (e) {
+      key = new Date().toISOString().slice(0, 10);
+    }
+    billingTodayCache[zone] = { minute: minute, key: key };
+    return key;
+  }
+
   function trafficResetDays(server) {
     if (!server || !server.period_end) return null;
-    const raw = String(server.period_end).slice(0, 10);
-    const end = new Date(raw + "T00:00:00");
-    const ms = end.getTime();
-    if (!Number.isFinite(ms)) return null;
-    return Math.max(0, Math.ceil((ms - Date.now()) / 86400000));
+    const end = dateKeyOrdinal(String(server.period_end).slice(0, 10));
+    const today = dateKeyOrdinal(todayKeyInZone(server.billing_timezone || state.billing_timezone || 'Asia/Shanghai'));
+    if (end == null || today == null) return null;
+    return Math.max(0, end - today);
   }
 
   function trafficQuotaPct(server) {
@@ -2795,9 +2819,14 @@
         const y = window.scrollY;
         render();
         window.scrollTo(0, y);
+        if (ProbeAPI.enrich) {
+          return ProbeAPI.enrich(payload, { loadFx: accessState.logged_in === true }).then(function (next) {
+            if (next) applyLive(next, { kind: 'enrichment' });
+          });
+        }
+        return null;
       }).catch(function () {});
       ProbeAPI.connectWS(applyLive);
-      if (ProbeAPI.enrich) ProbeAPI.enrich(payload).then(function (next) { if (next) applyLive(next, { kind: 'enrichment' }); }).catch(function () {});
       Promise.allSettled([
         ProbeAPI.fetchPingOverview().then(function (next) { if (next) applyLive(next); }),
         ProbeAPI.fetchTrafficHistory().then(function (next) { if (next) applyLive(next); }),

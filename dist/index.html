@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Komari Monitor</title>
   <meta name="description" content="A simple server monitor tool.">
-  <meta name="line-grid-version" content="0.4.2">
+  <meta name="line-grid-version" content="0.4.3">
   <script>
     (function () {
       var t = localStorage.getItem("mmwx-theme") === "light" ? "light" : "dark";
@@ -2904,7 +2904,7 @@ body.modal-open { overflow: hidden; }
     </section>
   </div>
   <div id="chart-tip" hidden></div>
-  <script data-inline-source="dist/metadata/nodes.json">window.LINE_GRID_METADATA={"global":{"show_globe":true,"traffic_reset_day":1},"nodes":{}};</script>
+  <script data-inline-source="dist/metadata/nodes.json">window.LINE_GRID_METADATA={"global":{"show_globe":true},"nodes":{}};</script>
   <script data-inline-source="dist/js/fx.js">
 (function (global) {
   const KEY = "mmwx-fx";
@@ -3618,19 +3618,31 @@ window.ProbeConfig = {
     { id: 'ipwho.is', url: function (ip) { return 'https://ipwho.is/' + encodeURIComponent(ip); }, parse: parseIpWho },
     { id: 'ipapi.co', url: function (ip) { return 'https://ipapi.co/' + encodeURIComponent(ip) + '/json/'; }, parse: parseIpApi },
   ];
-  let geoCursor = 0;
+  function geoProvider(value) {
+    const wanted = String(value || 'ip.sb').trim().toLowerCase();
+    return GEO_PROVIDERS.find(function (provider) { return provider.id.toLowerCase() === wanted; }) || GEO_PROVIDERS[0];
+  }
 
-  function lookupIpGeo(ip) {
+  function geoProviderOrder(primaryValue, allowFallback) {
+    const primary = geoProvider(primaryValue);
+    if (!allowFallback) return [primary];
+    return [primary].concat(GEO_PROVIDERS.filter(function (provider) { return provider.id !== primary.id; }));
+  }
+
+  function lookupIpGeo(ip, options) {
     const raw = String(ip || '').trim();
     if (!raw || raw.indexOf('*') >= 0) return Promise.resolve(null);
-    const cacheKey = GEO_CACHE_PREFIX + hashKey(raw);
+    options = options || {};
+    const primary = geoProvider(options.provider);
+    const allowFallback = options.fallback === true;
+    const cacheKey = GEO_CACHE_PREFIX + primary.id + ':' + hashKey(raw);
+    const inflightKey = primary.id + ':' + (allowFallback ? 'fallback:' : 'single:') + raw;
     const cached = cacheRead(cacheKey, GEO_CACHE_TTL);
     if (cached && validGeo(cached)) return Promise.resolve(cached);
     const neg = cacheRead(cacheKey + ':neg', GEO_NEG_TTL);
     if (neg) return Promise.resolve(null);
-    if (inflightGeo.has(raw)) return inflightGeo.get(raw);
-    const start = geoCursor++ % GEO_PROVIDERS.length;
-    const ordered = GEO_PROVIDERS.slice(start).concat(GEO_PROVIDERS.slice(0, start));
+    if (inflightGeo.has(inflightKey)) return inflightGeo.get(inflightKey);
+    const ordered = geoProviderOrder(primary.id, allowFallback);
     const task = (async function () {
       for (let i = 0; i < ordered.length; i += 1) {
         try {
@@ -3639,6 +3651,7 @@ window.ProbeConfig = {
           const data = await res.json();
           const geo = ordered[i].parse(data);
           if (validGeo(geo)) {
+            geo.provider = ordered[i].id;
             cacheWrite(cacheKey, geo);
             return geo;
           }
@@ -3647,8 +3660,8 @@ window.ProbeConfig = {
       cacheWrite(cacheKey + ':neg', true);
       return null;
     })();
-    inflightGeo.set(raw, task);
-    return task.finally(function () { inflightGeo.delete(raw); });
+    inflightGeo.set(inflightKey, task);
+    return task.finally(function () { inflightGeo.delete(inflightKey); });
   }
 
   function publicGeoKey(uuid) {
@@ -3688,10 +3701,11 @@ window.ProbeConfig = {
     if (payload.enable_ip_geo_asn !== true) return payload;
     const nodes = payload.servers.filter(function (s) { return s && s._lookup_ip && String(s._lookup_ip).indexOf('*') < 0; });
     const batchSize = 4;
+    const lookupOptions = { provider: payload.geo_ip_provider || 'ip.sb', fallback: payload.geo_ip_fallback === true };
     for (let i = 0; i < nodes.length; i += batchSize) {
       const batch = nodes.slice(i, i + batchSize);
       const results = await Promise.all(batch.map(function (s) {
-        return lookupIpGeo(s._lookup_ip).then(function (geo) { return { s: s, geo: geo }; });
+        return lookupIpGeo(s._lookup_ip, lookupOptions).then(function (geo) { return { s: s, geo: geo }; });
       }));
       results.forEach(function (r) {
         if (!r.geo) return;
@@ -3913,21 +3927,77 @@ window.ProbeConfig = {
     }
   }
 
-  function dateOnly(d) {
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const DATE_FORMATTERS = {};
+
+  function normalizeTimeZone(value) {
+    const zone = String(value || 'Asia/Shanghai').trim() || 'Asia/Shanghai';
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: zone }).format(new Date(0));
+      return zone;
+    } catch (e) {
+      return 'Asia/Shanghai';
+    }
   }
 
-  function billingWindow(resetDay) {
-    const day = Math.max(1, Math.min(31, Number(resetDay) || 1));
-    const now = new Date();
-    function resetDate(year, month) {
-      const lastDay = new Date(year, month + 1, 0).getDate();
-      return new Date(year, month, Math.min(day, lastDay));
+  function zonedDateParts(value, timeZone) {
+    const zone = normalizeTimeZone(timeZone);
+    let fmt = DATE_FORMATTERS[zone];
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit'
+      });
+      DATE_FORMATTERS[zone] = fmt;
     }
-    let start = resetDate(now.getFullYear(), now.getMonth());
-    if (now < start) start = resetDate(now.getFullYear(), now.getMonth() - 1);
-    const end = resetDate(start.getFullYear(), start.getMonth() + 1);
-    return { start: dateOnly(start), end: dateOnly(end), resetDay: day };
+    const out = {};
+    fmt.formatToParts(value instanceof Date ? value : new Date(value)).forEach(function (part) {
+      if (part.type === 'year' || part.type === 'month' || part.type === 'day') out[part.type] = Number(part.value);
+    });
+    return { year: out.year, month: out.month, day: out.day, timeZone: zone };
+  }
+
+  function makeDateKey(year, month, day) {
+    return String(year).padStart(4, '0') + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  }
+
+  function dateOnlyInZone(value, timeZone) {
+    const part = zonedDateParts(value, timeZone);
+    return makeDateKey(part.year, part.month, part.day);
+  }
+
+  function shiftDateKey(key, days) {
+    const m = String(key || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return '';
+    const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + Number(days || 0)));
+    return makeDateKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  }
+
+  function monthShift(year, month, delta) {
+    const zero = (year * 12 + (month - 1)) + delta;
+    return { year: Math.floor(zero / 12), month: ((zero % 12) + 12) % 12 + 1 };
+  }
+
+  function resetDateKey(year, month, day) {
+    const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return makeDateKey(year, month, Math.min(day, last));
+  }
+
+  function billingWindow(resetDay, timeZone, nowValue) {
+    const day = Math.max(1, Math.min(31, Number(resetDay) || 1));
+    const zone = normalizeTimeZone(timeZone);
+    const nowKey = dateOnlyInZone(nowValue == null ? new Date() : nowValue, zone);
+    const nowPart = zonedDateParts(nowValue == null ? new Date() : nowValue, zone);
+    let startYear = nowPart.year;
+    let startMonth = nowPart.month;
+    let start = resetDateKey(startYear, startMonth, day);
+    if (nowKey < start) {
+      const prev = monthShift(startYear, startMonth, -1);
+      startYear = prev.year;
+      startMonth = prev.month;
+      start = resetDateKey(startYear, startMonth, day);
+    }
+    const next = monthShift(startYear, startMonth, 1);
+    const end = resetDateKey(next.year, next.month, day);
+    return { start: start, end: end, resetDay: day, timeZone: zone };
   }
 
   function metadataFor(meta, uuid) {
@@ -4032,7 +4102,7 @@ window.ProbeConfig = {
     const price = numberOrNull(node.price);
     const cycle = numberOrNull(node.billing_cycle);
     const currency = String(node.currency || '').trim();
-    const cycleWindow = billingWindow(ext.traffic_reset_day || extPack.global.traffic_reset_day || 1);
+    const cycleWindow = billingWindow(ext.traffic_reset_day || extPack.global.traffic_reset_day || 1, ext.billing_timezone || extPack.global.billing_timezone || 'Asia/Shanghai');
     const cny = numberOrNull(ext.renewal_price_cny);
     const nativeCny = /^(CNY|RMB|CNH|¥|￥)$/i.test(currency) && price != null && price >= 0 ? price : null;
     const logicalThreads = numberOrNull(node.cpu_cores);
@@ -4096,6 +4166,7 @@ window.ProbeConfig = {
       daily_traffic: [],
       period_start: cycleWindow.start,
       period_end: cycleWindow.end,
+      billing_timezone: cycleWindow.timeZone,
       traffic_reset_day: cycleWindow.resetDay,
 
       ping: mapLivePing(hasLive ? live.ping : null, []),
@@ -4147,9 +4218,12 @@ window.ProbeConfig = {
       if (!uuid || resetOverrides[uuid] == null) return;
       effectiveNodes[uuid] = Object.assign({}, sourceNodes[uuid] || {}, { traffic_reset_day: resetOverrides[uuid] });
     });
+    const managedResetDay = settings.trafficResetDay != null && settings.trafficResetDay !== '' ? settings.trafficResetDay : null;
+    const managedBillingZone = settings.billingTimeZone != null && settings.billingTimeZone !== '' ? settings.billingTimeZone : null;
     const effectiveMeta = {
       global: Object.assign({}, metaGlobal, {
-        traffic_reset_day: metaGlobal.traffic_reset_day || settings.trafficResetDay || 1,
+        traffic_reset_day: managedResetDay != null ? managedResetDay : (metaGlobal.traffic_reset_day || 1),
+        billing_timezone: normalizeTimeZone(managedBillingZone || metaGlobal.billing_timezone || 'Asia/Shanghai'),
       }),
       nodes: effectiveNodes,
     };
@@ -4165,6 +4239,9 @@ window.ProbeConfig = {
       globe_quality: (function () { const q = String(metaGlobal.globe_quality || settings.globeQuality || 'Medium').toLowerCase(); return q === 'low' || q === 'high' ? q : 'medium'; })(),
       offline_server_position: String(metaGlobal.offline_server_position || settings.offlineServerPosition || 'Last'),
       enable_ip_geo_asn: [true, 1, '1', 'true', 'on'].indexOf(metaGlobal.enable_ip_geo_asn) >= 0 || [true, 1, '1', 'true', 'on'].indexOf(settings.enableIpGeoAsn) >= 0,
+      geo_ip_provider: String(metaGlobal.geo_ip_provider || settings.geoIpProvider || 'ip.sb'),
+      geo_ip_fallback: [true, 1, '1', 'true', 'on'].indexOf(metaGlobal.geo_ip_fallback) >= 0 || [true, 1, '1', 'true', 'on'].indexOf(settings.geoIpFallback) >= 0,
+      billing_timezone: normalizeTimeZone(managedBillingZone || metaGlobal.billing_timezone || 'Asia/Shanghai'),
       servers: servers,
       _source: 'komari-rpc2',
       _public: pub,
@@ -4327,7 +4404,7 @@ window.ProbeConfig = {
     };
   }
 
-  function buildDailyTraffic(rows, days) {
+  function buildDailyTraffic(rows, days, timeZone) {
     const list = rows.map(trafficCounters).filter(function (r) { return r.time != null && (r.up != null || r.down != null); }).sort(function (a, b) { return a.time - b.time; });
     const byDate = {};
     for (let i = 1; i < list.length; i += 1) {
@@ -4336,28 +4413,26 @@ window.ProbeConfig = {
       const up = cur.up == null || prev.up == null ? 0 : (cur.up >= prev.up ? cur.up - prev.up : cur.up);
       const down = cur.down == null || prev.down == null ? 0 : (cur.down >= prev.down ? cur.down - prev.down : cur.down);
       if (up < 0 || down < 0) continue;
-      const d = new Date(cur.time);
-      const key = dateOnly(d);
+      const key = dateOnlyInZone(new Date(cur.time), timeZone || 'Asia/Shanghai');
       if (!byDate[key]) byDate[key] = { date: key, uplink: 0, downlink: 0, total: 0 };
       byDate[key].uplink += up;
       byDate[key].downlink += down;
       byDate[key].total += up + down;
     }
-    const cutoff = new Date();
-    cutoff.setHours(0, 0, 0, 0);
-    cutoff.setDate(cutoff.getDate() - (Math.max(1, days || 7) - 1));
+    const today = dateOnlyInZone(new Date(), timeZone || 'Asia/Shanghai');
+    const cutoff = shiftDateKey(today, -(Math.max(1, days || 7) - 1));
     return Object.keys(byDate).sort().map(function (key) { return byDate[key]; }).filter(function (row) {
-      return new Date(row.date + 'T00:00:00').getTime() >= cutoff.getTime();
+      return row.date >= cutoff;
     });
   }
 
   function applyPeriodTraffic(server, daily, source) {
-    const start = server && server.period_start ? new Date(server.period_start + 'T00:00:00').getTime() : NaN;
-    const end = server && server.period_end ? new Date(server.period_end + 'T00:00:00').getTime() : NaN;
-    if (!Number.isFinite(start) || !Number.isFinite(end) || !Array.isArray(daily) || !daily.length) return false;
+    const start = server && /^\d{4}-\d{2}-\d{2}$/.test(String(server.period_start || '')) ? String(server.period_start) : '';
+    const end = server && /^\d{4}-\d{2}-\d{2}$/.test(String(server.period_end || '')) ? String(server.period_end) : '';
+    if (!start || !end || !Array.isArray(daily) || !daily.length) return false;
     const rows = daily.filter(function (row) {
-      const t = new Date(String(row.date || '') + 'T00:00:00').getTime();
-      return Number.isFinite(t) && t >= start && t < end;
+      const key = String(row.date || '');
+      return /^\d{4}-\d{2}-\d{2}$/.test(key) && key >= start && key < end;
     });
     if (!rows.length) return false;
     const up = rows.reduce(function (n, d) { return n + numberOr(d.uplink, 0); }, 0);
@@ -4371,10 +4446,10 @@ window.ProbeConfig = {
     server.traffic_used = server.traffic_period;
     server.traffic_source = source;
     const earliest = rows.reduce(function (min, row) {
-      const t = new Date(String(row.date || '') + 'T00:00:00').getTime();
-      return Number.isFinite(t) ? Math.min(min, t) : min;
-    }, Infinity);
-    server.traffic_period_complete = Number.isFinite(earliest) && earliest <= start + DAY * 1000;
+      const key = String(row.date || '');
+      return !min || key < min ? key : min;
+    }, '');
+    server.traffic_period_complete = !!earliest && earliest <= shiftDateKey(start, 1);
     return true;
   }
 
@@ -4383,7 +4458,7 @@ window.ProbeConfig = {
     let any = false;
     payload.servers.forEach(function (server) {
       const rows = extractRecordRows(raw, server.uuid);
-      const daily = buildDailyTraffic(rows, days || 7);
+      const daily = buildDailyTraffic(rows, days || 7, server.billing_timezone || payload.billing_timezone || 'Asia/Shanghai');
       server.daily_traffic = daily.slice(-Math.max(7, days || 7));
       server.traffic_history_days = daily.length;
       server.traffic_history_status = daily.length ? 'ok' : 'unavailable';
@@ -4420,20 +4495,19 @@ window.ProbeConfig = {
           const t = parseTime(point.time);
           const value = numberOrNull(point.value);
           if (t == null || value == null || value < 0) return;
-          const key = dateOnly(new Date(t));
+          const key = dateOnlyInZone(new Date(t), server.billing_timezone || payload.billing_timezone || 'Asia/Shanghai');
           if (!byDate[key]) byDate[key] = { date: key, uplink: 0, downlink: 0, total: 0 };
           if (metric === 'traffic.up') byDate[key].uplink += value;
           else byDate[key].downlink += value;
         });
       });
-      const cutoff = new Date();
-      cutoff.setHours(0, 0, 0, 0);
-      cutoff.setDate(cutoff.getDate() - (Math.max(1, days || 7) - 1));
+      const zone = server.billing_timezone || payload.billing_timezone || 'Asia/Shanghai';
+      const cutoff = shiftDateKey(dateOnlyInZone(new Date(), zone), -(Math.max(1, days || 7) - 1));
       const daily = Object.keys(byDate).sort().map(function (key) {
         const row = byDate[key];
         row.total = row.uplink + row.downlink;
         return row;
-      }).filter(function (row) { return new Date(row.date + 'T00:00:00').getTime() >= cutoff.getTime(); });
+      }).filter(function (row) { return row.date >= cutoff; });
       if (!daily.length) return;
       any = true;
       // Metric Store is the preferred source. Replace the fallback even when
@@ -4495,6 +4569,9 @@ window.ProbeConfig = {
     normalizeExpiry: normalizeExpiry,
     calcTraffic: calcTraffic,
     buildDailyTraffic: buildDailyTraffic,
+    billingWindow: billingWindow,
+    dateOnlyInZone: dateOnlyInZone,
+    normalizeTimeZone: normalizeTimeZone,
   };
 })(window);
 
@@ -4585,7 +4662,7 @@ window.ProbeConfig = {
     let requiredHours = 168;
     (lastPayload.servers || []).forEach(function (server) {
       if (!server || !server.period_start) return;
-      const start = new Date(String(server.period_start).slice(0, 10) + 'T00:00:00').getTime();
+      const start = Date.parse(String(server.period_start).slice(0, 10) + 'T00:00:00Z');
       if (!Number.isFinite(start)) return;
       requiredHours = Math.max(requiredHours, Math.ceil((now - start) / 3600000) + 48);
     });
@@ -4674,14 +4751,19 @@ window.ProbeConfig = {
   }
 
 
-  function enrich(payload) {
+  function enrich(payload, options) {
     if (!payload || !global.LineGridEnrich) return Promise.resolve(payload);
+    options = options || {};
     const tasks = [];
-    tasks.push(LineGridEnrich.getDailyExchangeRates().then(function (fx) {
-      payload._fx_rates = fx && fx.rates || LineGridEnrich.defaultRates;
-      payload._fx_source = fx && fx.source || 'default';
-      payload._fx_updated_at = fx && fx.updatedAt || null;
-    }).catch(function () {}));
+    if (options.loadFx === true) {
+      tasks.push(LineGridEnrich.getDailyExchangeRates().then(function (fx) {
+        payload._fx_rates = fx && fx.rates || LineGridEnrich.defaultRates;
+        payload._fx_source = fx && fx.source || 'default';
+        payload._fx_updated_at = fx && fx.updatedAt || null;
+      }).catch(function () {}));
+    } else {
+      payload._fx_source = payload._fx_source || 'deferred';
+    }
     // Always hydrate the UUID-keyed sanitized city cache. enrichNodes itself
     // only sends a full IP to GeoIP providers when the opt-in switch is on.
     tasks.push(LineGridEnrich.enrichNodes(payload).catch(function () {}));
@@ -5193,6 +5275,7 @@ window.ProbeConfig = {
   let globeLiveTick = 0;
   let financeSortKey = "";
   let financeSortDir = 0; // 0=default monthly desc, -1=desc, 1=asc
+  const billingTodayCache = {};
 
   function h(value) {
     return String(value == null ? "" : value)
@@ -5940,13 +6023,36 @@ window.ProbeConfig = {
     );
   }
 
+  function dateKeyOrdinal(key) {
+    const m = String(key || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000);
+  }
+
+  function todayKeyInZone(timeZone) {
+    const zone = String(timeZone || 'Asia/Shanghai');
+    const minute = Math.floor(Date.now() / 60000);
+    const cached = billingTodayCache[zone];
+    if (cached && cached.minute === minute) return cached.key;
+    let key;
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+      const out = {};
+      parts.forEach(function (part) { if (part.type === 'year' || part.type === 'month' || part.type === 'day') out[part.type] = part.value; });
+      key = out.year + '-' + out.month + '-' + out.day;
+    } catch (e) {
+      key = new Date().toISOString().slice(0, 10);
+    }
+    billingTodayCache[zone] = { minute: minute, key: key };
+    return key;
+  }
+
   function trafficResetDays(server) {
     if (!server || !server.period_end) return null;
-    const raw = String(server.period_end).slice(0, 10);
-    const end = new Date(raw + "T00:00:00");
-    const ms = end.getTime();
-    if (!Number.isFinite(ms)) return null;
-    return Math.max(0, Math.ceil((ms - Date.now()) / 86400000));
+    const end = dateKeyOrdinal(String(server.period_end).slice(0, 10));
+    const today = dateKeyOrdinal(todayKeyInZone(server.billing_timezone || state.billing_timezone || 'Asia/Shanghai'));
+    if (end == null || today == null) return null;
+    return Math.max(0, end - today);
   }
 
   function trafficQuotaPct(server) {
@@ -7943,9 +8049,14 @@ window.ProbeConfig = {
         const y = window.scrollY;
         render();
         window.scrollTo(0, y);
+        if (ProbeAPI.enrich) {
+          return ProbeAPI.enrich(payload, { loadFx: accessState.logged_in === true }).then(function (next) {
+            if (next) applyLive(next, { kind: 'enrichment' });
+          });
+        }
+        return null;
       }).catch(function () {});
       ProbeAPI.connectWS(applyLive);
-      if (ProbeAPI.enrich) ProbeAPI.enrich(payload).then(function (next) { if (next) applyLive(next, { kind: 'enrichment' }); }).catch(function () {});
       Promise.allSettled([
         ProbeAPI.fetchPingOverview().then(function (next) { if (next) applyLive(next); }),
         ProbeAPI.fetchTrafficHistory().then(function (next) { if (next) applyLive(next); }),

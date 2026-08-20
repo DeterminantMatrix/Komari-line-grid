@@ -128,21 +128,77 @@
     }
   }
 
-  function dateOnly(d) {
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const DATE_FORMATTERS = {};
+
+  function normalizeTimeZone(value) {
+    const zone = String(value || 'Asia/Shanghai').trim() || 'Asia/Shanghai';
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: zone }).format(new Date(0));
+      return zone;
+    } catch (e) {
+      return 'Asia/Shanghai';
+    }
   }
 
-  function billingWindow(resetDay) {
-    const day = Math.max(1, Math.min(31, Number(resetDay) || 1));
-    const now = new Date();
-    function resetDate(year, month) {
-      const lastDay = new Date(year, month + 1, 0).getDate();
-      return new Date(year, month, Math.min(day, lastDay));
+  function zonedDateParts(value, timeZone) {
+    const zone = normalizeTimeZone(timeZone);
+    let fmt = DATE_FORMATTERS[zone];
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit'
+      });
+      DATE_FORMATTERS[zone] = fmt;
     }
-    let start = resetDate(now.getFullYear(), now.getMonth());
-    if (now < start) start = resetDate(now.getFullYear(), now.getMonth() - 1);
-    const end = resetDate(start.getFullYear(), start.getMonth() + 1);
-    return { start: dateOnly(start), end: dateOnly(end), resetDay: day };
+    const out = {};
+    fmt.formatToParts(value instanceof Date ? value : new Date(value)).forEach(function (part) {
+      if (part.type === 'year' || part.type === 'month' || part.type === 'day') out[part.type] = Number(part.value);
+    });
+    return { year: out.year, month: out.month, day: out.day, timeZone: zone };
+  }
+
+  function makeDateKey(year, month, day) {
+    return String(year).padStart(4, '0') + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  }
+
+  function dateOnlyInZone(value, timeZone) {
+    const part = zonedDateParts(value, timeZone);
+    return makeDateKey(part.year, part.month, part.day);
+  }
+
+  function shiftDateKey(key, days) {
+    const m = String(key || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return '';
+    const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + Number(days || 0)));
+    return makeDateKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  }
+
+  function monthShift(year, month, delta) {
+    const zero = (year * 12 + (month - 1)) + delta;
+    return { year: Math.floor(zero / 12), month: ((zero % 12) + 12) % 12 + 1 };
+  }
+
+  function resetDateKey(year, month, day) {
+    const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return makeDateKey(year, month, Math.min(day, last));
+  }
+
+  function billingWindow(resetDay, timeZone, nowValue) {
+    const day = Math.max(1, Math.min(31, Number(resetDay) || 1));
+    const zone = normalizeTimeZone(timeZone);
+    const nowKey = dateOnlyInZone(nowValue == null ? new Date() : nowValue, zone);
+    const nowPart = zonedDateParts(nowValue == null ? new Date() : nowValue, zone);
+    let startYear = nowPart.year;
+    let startMonth = nowPart.month;
+    let start = resetDateKey(startYear, startMonth, day);
+    if (nowKey < start) {
+      const prev = monthShift(startYear, startMonth, -1);
+      startYear = prev.year;
+      startMonth = prev.month;
+      start = resetDateKey(startYear, startMonth, day);
+    }
+    const next = monthShift(startYear, startMonth, 1);
+    const end = resetDateKey(next.year, next.month, day);
+    return { start: start, end: end, resetDay: day, timeZone: zone };
   }
 
   function metadataFor(meta, uuid) {
@@ -247,7 +303,7 @@
     const price = numberOrNull(node.price);
     const cycle = numberOrNull(node.billing_cycle);
     const currency = String(node.currency || '').trim();
-    const cycleWindow = billingWindow(ext.traffic_reset_day || extPack.global.traffic_reset_day || 1);
+    const cycleWindow = billingWindow(ext.traffic_reset_day || extPack.global.traffic_reset_day || 1, ext.billing_timezone || extPack.global.billing_timezone || 'Asia/Shanghai');
     const cny = numberOrNull(ext.renewal_price_cny);
     const nativeCny = /^(CNY|RMB|CNH|¥|￥)$/i.test(currency) && price != null && price >= 0 ? price : null;
     const logicalThreads = numberOrNull(node.cpu_cores);
@@ -311,6 +367,7 @@
       daily_traffic: [],
       period_start: cycleWindow.start,
       period_end: cycleWindow.end,
+      billing_timezone: cycleWindow.timeZone,
       traffic_reset_day: cycleWindow.resetDay,
 
       ping: mapLivePing(hasLive ? live.ping : null, []),
@@ -362,9 +419,12 @@
       if (!uuid || resetOverrides[uuid] == null) return;
       effectiveNodes[uuid] = Object.assign({}, sourceNodes[uuid] || {}, { traffic_reset_day: resetOverrides[uuid] });
     });
+    const managedResetDay = settings.trafficResetDay != null && settings.trafficResetDay !== '' ? settings.trafficResetDay : null;
+    const managedBillingZone = settings.billingTimeZone != null && settings.billingTimeZone !== '' ? settings.billingTimeZone : null;
     const effectiveMeta = {
       global: Object.assign({}, metaGlobal, {
-        traffic_reset_day: metaGlobal.traffic_reset_day || settings.trafficResetDay || 1,
+        traffic_reset_day: managedResetDay != null ? managedResetDay : (metaGlobal.traffic_reset_day || 1),
+        billing_timezone: normalizeTimeZone(managedBillingZone || metaGlobal.billing_timezone || 'Asia/Shanghai'),
       }),
       nodes: effectiveNodes,
     };
@@ -380,6 +440,9 @@
       globe_quality: (function () { const q = String(metaGlobal.globe_quality || settings.globeQuality || 'Medium').toLowerCase(); return q === 'low' || q === 'high' ? q : 'medium'; })(),
       offline_server_position: String(metaGlobal.offline_server_position || settings.offlineServerPosition || 'Last'),
       enable_ip_geo_asn: [true, 1, '1', 'true', 'on'].indexOf(metaGlobal.enable_ip_geo_asn) >= 0 || [true, 1, '1', 'true', 'on'].indexOf(settings.enableIpGeoAsn) >= 0,
+      geo_ip_provider: String(metaGlobal.geo_ip_provider || settings.geoIpProvider || 'ip.sb'),
+      geo_ip_fallback: [true, 1, '1', 'true', 'on'].indexOf(metaGlobal.geo_ip_fallback) >= 0 || [true, 1, '1', 'true', 'on'].indexOf(settings.geoIpFallback) >= 0,
+      billing_timezone: normalizeTimeZone(managedBillingZone || metaGlobal.billing_timezone || 'Asia/Shanghai'),
       servers: servers,
       _source: 'komari-rpc2',
       _public: pub,
@@ -542,7 +605,7 @@
     };
   }
 
-  function buildDailyTraffic(rows, days) {
+  function buildDailyTraffic(rows, days, timeZone) {
     const list = rows.map(trafficCounters).filter(function (r) { return r.time != null && (r.up != null || r.down != null); }).sort(function (a, b) { return a.time - b.time; });
     const byDate = {};
     for (let i = 1; i < list.length; i += 1) {
@@ -551,28 +614,26 @@
       const up = cur.up == null || prev.up == null ? 0 : (cur.up >= prev.up ? cur.up - prev.up : cur.up);
       const down = cur.down == null || prev.down == null ? 0 : (cur.down >= prev.down ? cur.down - prev.down : cur.down);
       if (up < 0 || down < 0) continue;
-      const d = new Date(cur.time);
-      const key = dateOnly(d);
+      const key = dateOnlyInZone(new Date(cur.time), timeZone || 'Asia/Shanghai');
       if (!byDate[key]) byDate[key] = { date: key, uplink: 0, downlink: 0, total: 0 };
       byDate[key].uplink += up;
       byDate[key].downlink += down;
       byDate[key].total += up + down;
     }
-    const cutoff = new Date();
-    cutoff.setHours(0, 0, 0, 0);
-    cutoff.setDate(cutoff.getDate() - (Math.max(1, days || 7) - 1));
+    const today = dateOnlyInZone(new Date(), timeZone || 'Asia/Shanghai');
+    const cutoff = shiftDateKey(today, -(Math.max(1, days || 7) - 1));
     return Object.keys(byDate).sort().map(function (key) { return byDate[key]; }).filter(function (row) {
-      return new Date(row.date + 'T00:00:00').getTime() >= cutoff.getTime();
+      return row.date >= cutoff;
     });
   }
 
   function applyPeriodTraffic(server, daily, source) {
-    const start = server && server.period_start ? new Date(server.period_start + 'T00:00:00').getTime() : NaN;
-    const end = server && server.period_end ? new Date(server.period_end + 'T00:00:00').getTime() : NaN;
-    if (!Number.isFinite(start) || !Number.isFinite(end) || !Array.isArray(daily) || !daily.length) return false;
+    const start = server && /^\d{4}-\d{2}-\d{2}$/.test(String(server.period_start || '')) ? String(server.period_start) : '';
+    const end = server && /^\d{4}-\d{2}-\d{2}$/.test(String(server.period_end || '')) ? String(server.period_end) : '';
+    if (!start || !end || !Array.isArray(daily) || !daily.length) return false;
     const rows = daily.filter(function (row) {
-      const t = new Date(String(row.date || '') + 'T00:00:00').getTime();
-      return Number.isFinite(t) && t >= start && t < end;
+      const key = String(row.date || '');
+      return /^\d{4}-\d{2}-\d{2}$/.test(key) && key >= start && key < end;
     });
     if (!rows.length) return false;
     const up = rows.reduce(function (n, d) { return n + numberOr(d.uplink, 0); }, 0);
@@ -586,10 +647,10 @@
     server.traffic_used = server.traffic_period;
     server.traffic_source = source;
     const earliest = rows.reduce(function (min, row) {
-      const t = new Date(String(row.date || '') + 'T00:00:00').getTime();
-      return Number.isFinite(t) ? Math.min(min, t) : min;
-    }, Infinity);
-    server.traffic_period_complete = Number.isFinite(earliest) && earliest <= start + DAY * 1000;
+      const key = String(row.date || '');
+      return !min || key < min ? key : min;
+    }, '');
+    server.traffic_period_complete = !!earliest && earliest <= shiftDateKey(start, 1);
     return true;
   }
 
@@ -598,7 +659,7 @@
     let any = false;
     payload.servers.forEach(function (server) {
       const rows = extractRecordRows(raw, server.uuid);
-      const daily = buildDailyTraffic(rows, days || 7);
+      const daily = buildDailyTraffic(rows, days || 7, server.billing_timezone || payload.billing_timezone || 'Asia/Shanghai');
       server.daily_traffic = daily.slice(-Math.max(7, days || 7));
       server.traffic_history_days = daily.length;
       server.traffic_history_status = daily.length ? 'ok' : 'unavailable';
@@ -635,20 +696,19 @@
           const t = parseTime(point.time);
           const value = numberOrNull(point.value);
           if (t == null || value == null || value < 0) return;
-          const key = dateOnly(new Date(t));
+          const key = dateOnlyInZone(new Date(t), server.billing_timezone || payload.billing_timezone || 'Asia/Shanghai');
           if (!byDate[key]) byDate[key] = { date: key, uplink: 0, downlink: 0, total: 0 };
           if (metric === 'traffic.up') byDate[key].uplink += value;
           else byDate[key].downlink += value;
         });
       });
-      const cutoff = new Date();
-      cutoff.setHours(0, 0, 0, 0);
-      cutoff.setDate(cutoff.getDate() - (Math.max(1, days || 7) - 1));
+      const zone = server.billing_timezone || payload.billing_timezone || 'Asia/Shanghai';
+      const cutoff = shiftDateKey(dateOnlyInZone(new Date(), zone), -(Math.max(1, days || 7) - 1));
       const daily = Object.keys(byDate).sort().map(function (key) {
         const row = byDate[key];
         row.total = row.uplink + row.downlink;
         return row;
-      }).filter(function (row) { return new Date(row.date + 'T00:00:00').getTime() >= cutoff.getTime(); });
+      }).filter(function (row) { return row.date >= cutoff; });
       if (!daily.length) return;
       any = true;
       // Metric Store is the preferred source. Replace the fallback even when
@@ -710,5 +770,8 @@
     normalizeExpiry: normalizeExpiry,
     calcTraffic: calcTraffic,
     buildDailyTraffic: buildDailyTraffic,
+    billingWindow: billingWindow,
+    dateOnlyInZone: dateOnlyInZone,
+    normalizeTimeZone: normalizeTimeZone,
   };
 })(window);
