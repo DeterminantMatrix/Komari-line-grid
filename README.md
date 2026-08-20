@@ -2,6 +2,8 @@
 
 将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari Monitor，并使用 Komari 当前 RPC2 / Metric Store 数据接口。当前仓库包含可直接导入的 v0.3.13 构建产物。
 
+<img width="430" height="307" alt="image" src="https://github.com/user-attachments/assets/c0a48171-4bc4-4d24-a261-1190163f85c0" /><img width="430" height="307" alt="image" src="https://github.com/user-attachments/assets/9f71965f-ebcd-426e-9701-5c9b44624ba2" />
+
 ## v0.3.13
 
 v0.3.13 延续上游 line-grid 的布局节奏，同时补齐 Komari 场景下的数据、移动端和管理功能：
