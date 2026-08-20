@@ -1,4 +1,4 @@
-# Komari Line Grid
+# Komari Line Grid （Komari 主题）
 
 将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari Monitor，并使用 Komari 当前 RPC2 / Metric Store 数据接口。当前仓库包含可直接导入的 v0.4.2 构建产物。
 
