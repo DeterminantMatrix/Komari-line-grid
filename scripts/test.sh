@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-for file in dist/js/*.js scripts/build-release.js scripts/slim-app.js scripts/slim-demo.js scripts/slim-css.js scripts/runtime-fixes.js scripts/time-axis-fix.js scripts/refine-v051.js scripts/test-adapter.js scripts/test-lite.js scripts/test-runtime-fixes.js scripts/test-time-axis.js; do
+for file in dist/js/*.js scripts/build-release.js scripts/slim-app.js scripts/slim-demo.js scripts/slim-css.js scripts/runtime-fixes.js scripts/time-axis-fix.js scripts/refine-v051.js scripts/refine-v051-adapter.js scripts/refine-v051-app.js scripts/refine-v051-runtime.js scripts/refine-v051-visual.js scripts/test-adapter.js scripts/test-lite.js scripts/test-runtime-fixes.js scripts/test-time-axis.js; do
   node --check "$file"
 done
 node scripts/test-adapter.js
@@ -87,8 +87,11 @@ for(const required of [
   '暂无该时间范围的延迟历史','VPS / 地区 / ASN / 服务商','有限额合计','全部无限流量',
   'function pingWindowDomain()','opt.domainStart = domain.start','const fixedDomain = Number.isFinite(requestedStart)',
   'const onlineNow = hasLive && live.online === true','const liveRamTotal = numberOrNull(live.ram_total)',
-  '["处理器", s.cpu_model || "—"]','function resourceWeekRows(servers)','/7 天有记录','最高项排序 · 离线 ',
-  'resource-heat-wrap','已过期 ','今天到期','无历史记录','setTimeout(refreshUICompatibility, 0)'
+  '["处理器", s.cpu_model || "—"]','["内存 / Swap", fmtBytes(s.mem_total, 1) + " / " + fmtBytes(s.swap_total, 1)]',
+  '["磁盘总量", fmtBytes(s.disk_total, 1)]','function systemAsnText(server)','is-compact-system',
+  'function resourceWeekRows(servers)','/7 天有记录','最高项排序 · 离线 ','resource-heat-wrap',
+  'maxBarWidth: 46','const slotW = w / Math.max(downs.length, 1)','已过期 ','今天到期','无历史记录',
+  'setTimeout(refreshUICompatibility, 0)'
 ]) {
   if(!html.includes(required)) throw new Error('shipped runtime missing regression/refinement fix: '+required);
 }
@@ -130,8 +133,10 @@ with ZipFile(name) as z:
         'class="node-ip"','idleMs: 64','dt * 0.0075','无限流量，无需额度预测','无限流量 · 不设重置',
         'slotCount','["1h", "6h", "24h", "7D"]','暂无该时间范围的延迟历史','VPS / 地区 / ASN / 服务商',
         'function pingWindowDomain()','opt.domainStart = domain.start','const fixedDomain = Number.isFinite(requestedStart)',
-        'const liveRamTotal = numberOrNull(live.ram_total)','function resourceWeekRows(servers)','/7 天有记录',
-        'resource-heat-wrap','已过期 ','今天到期','setTimeout(refreshUICompatibility, 0)'
+        'const liveRamTotal = numberOrNull(live.ram_total)','["内存 / Swap", fmtBytes(s.mem_total, 1) + " / " + fmtBytes(s.swap_total, 1)]',
+        '["磁盘总量", fmtBytes(s.disk_total, 1)]','function systemAsnText(server)','is-compact-system','maxBarWidth: 46',
+        'function resourceWeekRows(servers)','/7 天有记录','resource-heat-wrap','已过期 ','今天到期',
+        'setTimeout(refreshUICompatibility, 0)'
     )
     for required_text in required_texts:
         if required_text not in html: raise SystemExit('zip runtime missing refinement fix: '+required_text)
