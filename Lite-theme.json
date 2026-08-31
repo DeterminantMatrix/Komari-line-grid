@@ -1,0 +1,102 @@
+{
+  "name": "Line Grid",
+  "short": "line-grid",
+  "description": "Line Grid for Lite: a responsive infrastructure dashboard using Lite RPC2 and Metric Store, with globe, latency, traffic, resource, billing and anomaly views.",
+  "version": "0.4.3",
+  "author": "line-grid theme contributors / DeterminantMatrix",
+  "url": "https://github.com/DeterminantMatrix/Komari-line-grid",
+  "preview": "preview.svg",
+  "navigation": {
+    "server_detail": "/#/{uuid}/overview",
+    "server_network": "/#/{uuid}/ping",
+    "ping_task_parameter": "ping_task"
+  },
+  "configuration": {
+    "type": "managed",
+    "name": {
+      "en": "Line Grid Settings",
+      "zh-CN": "Line Grid 设置"
+    },
+    "data": [
+      {
+        "type": "title",
+        "name": {
+          "en": "General",
+          "zh-CN": "常规"
+        }
+      },
+      {
+        "key": "offlineServerPosition",
+        "type": "select",
+        "name": {
+          "en": "Offline server position",
+          "zh-CN": "离线节点位置"
+        },
+        "help": {
+          "en": "First, Keep, or Last. Within each group nodes follow Lite weight order.",
+          "zh-CN": "First / Keep / Last；组内按 Lite weight 顺序。"
+        },
+        "options": "First,Keep,Last",
+        "default": "Last"
+      },
+      {
+        "key": "showGlobe",
+        "type": "switch",
+        "name": {
+          "en": "Show globe",
+          "zh-CN": "显示地球"
+        },
+        "default": true
+      },
+      {
+        "key": "globeQuality",
+        "type": "select",
+        "name": {
+          "en": "Globe quality",
+          "zh-CN": "地球精度"
+        },
+        "options": "Low,Medium,High",
+        "default": "Medium"
+      },
+      {
+        "type": "title",
+        "name": {
+          "en": "Privacy & location",
+          "zh-CN": "隐私与定位"
+        }
+      },
+      {
+        "key": "enableIpGeoAsn",
+        "type": "switch",
+        "name": {
+          "en": "Enable GeoIP / ASN enrichment",
+          "zh-CN": "启用 GeoIP / ASN 识别"
+        },
+        "help": {
+          "en": "Opt-in. Only complete public node IP addresses visible to the current account may be sent to the selected GeoIP provider.",
+          "zh-CN": "隐私敏感，默认关闭。仅当前账号可见的完整公网节点 IP 才允许发送给所选 GeoIP 服务。"
+        },
+        "default": false
+      },
+      {
+        "key": "geoIpProvider",
+        "type": "select",
+        "name": {
+          "en": "GeoIP provider",
+          "zh-CN": "GeoIP 服务商"
+        },
+        "options": "ip.sb,ipinfo.io,ipwho.is,ipapi.co",
+        "default": "ip.sb"
+      },
+      {
+        "key": "geoIpFallback",
+        "type": "switch",
+        "name": {
+          "en": "Try other GeoIP providers on failure",
+          "zh-CN": "GeoIP 失败时尝试其他服务商"
+        },
+        "default": false
+      }
+    ]
+  }
+}
