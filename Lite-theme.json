@@ -59,6 +59,20 @@
         "default": "Medium"
       },
       {
+        "key": "fontMode",
+        "type": "select",
+        "name": {
+          "en": "Font mode",
+          "zh-CN": "字体模式"
+        },
+        "help": {
+          "en": "System uses only local system fonts and never requests external font servers. Web loads the current web fonts after Lite settings are known.",
+          "zh-CN": "System 仅使用本机系统字体且不会请求外部字体服务器；Web 在读取 Lite 设置后加载当前网页字体。"
+        },
+        "options": "Web,System",
+        "default": "Web"
+      },
+      {
         "type": "title",
         "name": {
           "en": "Privacy & location",
