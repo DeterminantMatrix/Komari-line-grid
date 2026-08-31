@@ -82,36 +82,24 @@
     ));
   }
 
-  function applyLiteNativeSemantics(payload, nodesRaw, latestRaw) {
-    if (!payload || !Array.isArray(payload.servers) || !global.KomariAdapt) return payload;
-    const nodes = objectValues(nodesRaw);
-    if (!nodes.some(isLiteNode)) return payload;
-    const nodeById = keyed(nodesRaw);
-    const latestById = keyed(latestRaw);
-    payload._runtime = 'lite';
-    payload._source = 'lite-rpc2';
-    payload.billing_timezone = 'Asia/Shanghai';
+  function validTrafficType(value) {
+    return ['sum', 'max', 'min', 'up', 'down'].indexOf(String(value || '').toLowerCase()) >= 0;
+  }
 
+  function applyLiteCurrentTotals(payload, latestRaw) {
+    if (!payload || payload._runtime !== 'lite' || !Array.isArray(payload.servers)) return payload;
+    const latestById = keyed(latestRaw);
     payload.servers.forEach(function (server) {
       if (!server || !server.uuid) return;
-      const node = nodeById[String(server.uuid)] || {};
       const live = latestById[String(server.uuid)] || {};
-      const resetDay = Number(node.traffic_reset_day);
-      if (Number.isInteger(resetDay) && resetDay >= 1 && resetDay <= 31 && KomariAdapt.billingWindow) {
-        const window = KomariAdapt.billingWindow(resetDay, 'Asia/Shanghai');
-        server.traffic_reset_day = resetDay;
-        server.billing_timezone = 'Asia/Shanghai';
-        server.period_start = window.start;
-        server.period_end = window.end;
-      }
-
       const up = Number(live.net_total_up);
       const down = Number(live.net_total_down);
       if (!Number.isFinite(up) && !Number.isFinite(down)) return;
       const safeUp = Number.isFinite(up) && up >= 0 ? up : 0;
       const safeDown = Number.isFinite(down) && down >= 0 ? down : 0;
-      const used = KomariAdapt.calcTraffic ? KomariAdapt.calcTraffic(safeUp, safeDown, server.traffic_limit_type) : safeUp + safeDown;
-
+      const used = global.KomariAdapt && KomariAdapt.calcTraffic
+        ? KomariAdapt.calcTraffic(safeUp, safeDown, server.traffic_limit_type)
+        : safeUp + safeDown;
       server._lite_native_period_up = safeUp;
       server._lite_native_period_down = safeDown;
       server._lite_native_period_used = used;
@@ -123,9 +111,6 @@
       server.traffic_used = used;
       server.traffic_source = 'lite_native_period';
       server.traffic_period_complete = true;
-
-      // Lite exposes calibrated current-cycle totals through net_total_*.
-      // They must not be labelled as lifetime counters by the compatibility UI.
       server.traffic_lifetime_up = null;
       server.traffic_lifetime_down = null;
       server.traffic_lifetime = null;
@@ -133,8 +118,33 @@
     return payload;
   }
 
-  function restoreLiteNativePeriod(payload) {
+  function applyLiteNativeSemantics(payload, nodesRaw, latestRaw) {
     if (!payload || !Array.isArray(payload.servers)) return payload;
+    const nodes = objectValues(nodesRaw);
+    if (payload._runtime !== 'lite' && !nodes.some(isLiteNode)) return payload;
+    const nodeById = keyed(nodesRaw);
+    payload._runtime = 'lite';
+    payload._source = 'lite-rpc2';
+
+    payload.servers.forEach(function (server) {
+      if (!server || !server.uuid) return;
+      const node = nodeById[String(server.uuid)] || {};
+      const effectiveLimit = Number(node.effective_traffic_limit);
+      if (Number.isFinite(effectiveLimit) && effectiveLimit >= 0) server.traffic_limit = effectiveLimit;
+      if (validTrafficType(node.effective_traffic_type)) server.traffic_limit_type = String(node.effective_traffic_type).toLowerCase();
+
+      // Lite owns reset-day interpretation and cycle boundaries. Do not retain
+      // browser-computed billing windows from the legacy Komari adapter.
+      server.period_start = null;
+      server.period_end = null;
+      server.billing_timezone = null;
+    });
+
+    return applyLiteCurrentTotals(payload, latestRaw);
+  }
+
+  function restoreLiteNativePeriod(payload) {
+    if (!payload || payload._runtime !== 'lite' || !Array.isArray(payload.servers)) return payload;
     payload.servers.forEach(function (server) {
       if (!server || server._lite_native_period_used == null) return;
       server.traffic_period_up = server._lite_native_period_up;
@@ -174,53 +184,34 @@
 
   function fetchTrafficHistory(hours) {
     if (!lastPayload) return Promise.resolve(null);
-    const now = Date.now();
-    let requiredHours = 168;
-    (lastPayload.servers || []).forEach(function (server) {
-      if (!server || !server.period_start) return;
-      const start = Date.parse(String(server.period_start).slice(0, 10) + 'T00:00:00Z');
-      if (!Number.isFinite(start)) return;
-      requiredHours = Math.max(requiredHours, Math.ceil((now - start) / 3600000) + 48);
-    });
-    const windowHours = Math.min(840, Math.max(168, Number(hours) || 0, requiredHours));
+    const windowHours = Math.min(840, Math.max(168, Number(hours) || 0));
     const days = Math.ceil(windowHours / 24);
     const uuids = (lastPayload.servers || []).map(function (s) { return s.uuid; }).filter(Boolean);
-
-    function metricPrimary() {
-      if (!uuids.length || !KomariAdapt.mergeMetricTraffic) return Promise.resolve(false);
-      return rpc('public:queryMetrics', {
-        metric_keys: ['traffic.up', 'traffic.down'],
-        entity_ids: uuids,
-        hours: windowHours,
-        aggregation: 'sum',
-        fill_empty: false,
-        max_points: Math.min(1200, Math.max(336, days * 24 + 24)),
-      }, 18000).then(function (raw) {
-        KomariAdapt.mergeMetricTraffic(lastPayload, raw, days);
-        restoreLiteNativePeriod(lastPayload);
-        return (lastPayload.servers || []).some(function (s) { return s.traffic_source === 'metric_period' || s.traffic_source === 'lite_native_period'; });
-      }).catch(function () { return false; });
+    if (!uuids.length || !KomariAdapt.mergeMetricTraffic) {
+      lastPayload._traffic_history_status = 'unavailable';
+      return Promise.resolve(lastPayload);
     }
 
-    function recordFallback() {
-      return rpc('common:getRecords', { type: 'load', uuid: '', hours: windowHours, maxCount: 30000 }, 18000)
-        .then(function (raw) {
-          KomariAdapt.mergeTrafficHistory(lastPayload, raw, days);
-          restoreLiteNativePeriod(lastPayload);
-          return true;
-        }).catch(function () { return false; });
-    }
-
-    return metricPrimary().then(function () {
-      const missing = (lastPayload.servers || []).some(function (s) { return s.traffic_used == null; });
-      return missing ? recordFallback() : true;
-    }).then(function () {
+    return rpc('public:queryMetrics', {
+      metric_keys: ['traffic.up', 'traffic.down'],
+      entity_ids: uuids,
+      hours: windowHours,
+      aggregation: 'sum',
+      fill_empty: false,
+      max_points: Math.min(1200, Math.max(336, days * 24 + 24)),
+    }, 18000).then(function (raw) {
+      KomariAdapt.mergeMetricTraffic(lastPayload, raw, days);
       restoreLiteNativePeriod(lastPayload);
       const any = (lastPayload.servers || []).some(function (s) { return s.daily_traffic && s.daily_traffic.length; });
       lastPayload._traffic_history_status = any ? 'ok' : 'unavailable';
       (lastPayload.servers || []).forEach(function (s) {
         if (!s.daily_traffic || !s.daily_traffic.length) s.traffic_history_status = 'unavailable';
       });
+      return lastPayload;
+    }).catch(function () {
+      restoreLiteNativePeriod(lastPayload);
+      lastPayload._traffic_history_status = 'unavailable';
+      (lastPayload.servers || []).forEach(function (s) { s.traffic_history_status = 'unavailable'; });
       return lastPayload;
     });
   }
@@ -306,9 +297,7 @@
         .then(function (latest) {
           if (stopped) return;
           KomariAdapt.mergeLatest(lastPayload, latest);
-          if (lastPayload._runtime === 'lite') {
-            applyLiteNativeSemantics(lastPayload, {}, latest);
-          }
+          applyLiteCurrentTotals(lastPayload, latest);
           if (typeof onPayload === 'function') onPayload(lastPayload, { kind: 'latest' });
         })
         .catch(function () {})
