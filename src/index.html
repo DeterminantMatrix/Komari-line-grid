@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Line Grid</title>
   <meta name="description" content="Line Grid server monitoring theme for Lite.">
-  <meta name="line-grid-version" content="0.5.7">
+  <meta name="line-grid-version" content="__LINE_GRID_VERSION__">
   <script>
     (function () {
       var t = localStorage.getItem("mmwx-theme") === "light" ? "light" : "dark";
@@ -18,7 +18,7 @@
       document.documentElement.setAttribute("data-fx-expose", fx.expose);
     })();
   </script>
-  <link rel="stylesheet" data-inline-href="dist/css/app.css" href="./css/app.css">
+  <link rel="stylesheet" href="./style.css" data-inline-href="src/style.css">
 </head>
 <body>
   <div class="fx-grain" aria-hidden="true"></div>
@@ -76,15 +76,6 @@
     </section>
   </div>
   <div id="chart-tip" hidden></div>
-  <script data-inline-metadata="dist/metadata/nodes.json"></script>
-  <script data-inline-src="dist/js/fx.js"></script>
-  <script data-inline-src="dist/js/config.js"></script>
-  <script data-inline-src="dist/js/enrich.js"></script>
-  <script data-inline-src="dist/js/lite-adapter.js"></script>
-  <script data-inline-src="dist/js/api.js"></script>
-  <script data-inline-src="dist/js/lite.js"></script>
-  <script data-inline-src="dist/js/charts.js"></script>
-  <script data-inline-src="dist/js/land.js"></script>
-  <script data-inline-src="dist/js/app.js"></script>
+  <script src="./app.js" data-inline-src="src/app.js"></script>
 </body>
 </html>
