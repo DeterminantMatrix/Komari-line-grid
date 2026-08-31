@@ -1,11 +1,16 @@
 {
   "name": "Line Grid",
   "short": "line-grid",
-  "description": "Line Grid v0.5.0 for Komari RPC2: responsive infrastructure views, latency, traffic history, resources, billing metadata, GeoIP controls and incremental live updates. Traffic-cycle management is delegated to the backend.",
+  "description": "Line Grid for Lite: a responsive infrastructure dashboard using Lite RPC2 and Metric Store, with globe, latency, traffic, resource, billing and anomaly views.",
   "version": "0.5.0",
   "author": "line-grid theme contributors / DeterminantMatrix",
   "url": "https://github.com/DeterminantMatrix/Komari-line-grid",
   "preview": "preview.svg",
+  "navigation": {
+    "server_detail": "/node/{uuid}/overview",
+    "server_network": "/network/node/{uuid}/ping",
+    "ping_task_parameter": "ping_task"
+  },
   "configuration": {
     "type": "managed",
     "name": {
@@ -28,11 +33,11 @@
           "zh-CN": "离线节点位置"
         },
         "help": {
-          "en": "First, Keep, or Last. Within each group nodes follow backend weight order.",
-          "zh-CN": "First / Keep / Last；组内按后端 weight 顺序。"
+          "en": "Keep follows Lite's native weight order exactly. First or Last can be selected explicitly if desired.",
+          "zh-CN": "Keep 严格跟随 Lite 后台原生 weight 顺序；如有需要可手动选择 First / Last。"
         },
         "options": "First,Keep,Last",
-        "default": "Last"
+        "default": "Keep"
       },
       {
         "key": "showGlobe",
@@ -49,10 +54,6 @@
         "name": {
           "en": "Globe quality",
           "zh-CN": "地球精度"
-        },
-        "help": {
-          "en": "Low uses simplified continents and the lowest refresh rate; Medium keeps detailed land with reduced coastline sampling; High uses the full coastline and densest links.",
-          "zh-CN": "低：简化大陆+最低刷新率；中：完整大陆但降低海岸线采样与连线密度；高：完整海岸线、最密连线和最高刷新率。"
         },
         "options": "Low,Medium,High",
         "default": "Medium"
@@ -72,8 +73,8 @@
           "zh-CN": "启用 GeoIP / ASN 识别"
         },
         "help": {
-          "en": "Opt-in. Full node IPs visible to your current account are sent to public GeoIP providers.",
-          "zh-CN": "隐私敏感，默认关闭。开启后会将当前账号可见的完整公网节点 IP 发送给公共 GeoIP 服务。"
+          "en": "Opt-in. Only complete public node IP addresses visible to the current account may be sent to the selected GeoIP provider.",
+          "zh-CN": "隐私敏感，默认关闭。仅当前账号可见的完整公网节点 IP 才允许发送给所选 GeoIP 服务。"
         },
         "default": false
       },
@@ -84,10 +85,6 @@
           "en": "GeoIP provider",
           "zh-CN": "GeoIP 服务商"
         },
-        "help": {
-          "en": "Primary public GeoIP service. Only used when GeoIP / ASN enrichment is enabled.",
-          "zh-CN": "GeoIP / ASN 识别开启后使用的首选公共服务。"
-        },
         "options": "ip.sb,ipinfo.io,ipwho.is,ipapi.co",
         "default": "ip.sb"
       },
@@ -97,10 +94,6 @@
         "name": {
           "en": "Try other GeoIP providers on failure",
           "zh-CN": "GeoIP 失败时尝试其他服务商"
-        },
-        "help": {
-          "en": "Off by default. When enabled, failed lookups may be retried with another configured public provider.",
-          "zh-CN": "默认关闭。开启后首选服务失败时，才会继续尝试其他公共 GeoIP 服务。"
         },
         "default": false
       }
