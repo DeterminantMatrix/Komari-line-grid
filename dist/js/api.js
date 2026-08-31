@@ -120,38 +120,12 @@
     });
   }
 
-  function fetchAccess(uuid) {
+  function fetchAccess() {
     return rpc('common:getMe', {}, 5000).then(function (me) {
       const loggedIn = !!(me && me.logged_in);
-      if (!loggedIn) return { known: true, logged_in: false, is_admin: false };
-      if (!uuid) return { known: true, logged_in: true, is_admin: false };
-      return rpc('admin:getClient', { uuid: String(uuid) }, 5000).then(function () {
-        return { known: true, logged_in: true, is_admin: true };
-      }).catch(function () {
-        return { known: true, logged_in: true, is_admin: false };
-      });
+      return { known: true, logged_in: loggedIn, is_admin: loggedIn };
     }).catch(function () {
       return { known: true, logged_in: false, is_admin: false };
-    });
-  }
-
-  // Temporary bridge until the legacy Return tab is removed from app.js.
-  // v0.5.1 does not read these tags as authoritative Return Route data.
-  function saveReturnRoutes(uuid, choices) {
-    const prefix = 'linegrid:return:';
-    const carriers = ['telecom', 'unicom', 'mobile'];
-    return rpc('admin:getClient', { uuid: String(uuid || '') }, 6000).then(function (client) {
-      if (!client || !client.uuid) throw new Error('无法读取管理员节点信息');
-      const existing = String(client.tags || '').split(';').map(function (tag) { return tag.trim(); }).filter(Boolean);
-      const kept = existing.filter(function (tag) { return tag.indexOf(prefix) !== 0; });
-      carriers.forEach(function (carrier) {
-        const value = String(choices && choices[carrier] || '').trim();
-        if (value) kept.push(prefix + carrier + '=' + encodeURIComponent(value));
-      });
-      const tags = kept.join(';');
-      return rpc('admin:editClient', { uuid: String(uuid), tags: tags }, 8000).then(function () {
-        return { uuid: String(uuid), tags: tags };
-      });
     });
   }
 
@@ -236,7 +210,6 @@
     fetchTrafficHistory: fetchTrafficHistory,
     fetchSeries: fetchSeries,
     fetchAccess: fetchAccess,
-    saveReturnRoutes: saveReturnRoutes,
     enrich: enrich,
     connectWS: connectWS,
     sparkFromSeries: sparkFromSeries,
