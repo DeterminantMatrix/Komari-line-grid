@@ -27,6 +27,26 @@ assert(app.includes('class="node-ip"'), 'node list IP display missing');
 assert(app.includes('? ("运行 " + fmtDays(s.uptime))'), 'detail uptime wording not fixed');
 assert(!app.includes('function maskIP('), 'redundant theme IP masker survived');
 
+assert(app.includes('["1h", "6h", "24h", "7D"]'), '7D latency range control missing');
+assert(app.includes('range === "7D" ? 168'), '7D latency axis does not span 168 hours');
+assert(app.includes('rangeStepMinutes'), 'latency tooltip spacing is not range-aware');
+assert(app.includes('暂无该时间范围的延迟历史'), 'latency empty state missing');
+assert(app.includes('暂无 Ping Task 数据'), 'Ping Task empty state missing');
+assert(app.includes('1h / 6h / 24h / 7D'), 'network range legend missing 7D');
+assert(app.includes('placeholder="VPS / 地区 / ASN / 服务商"'), 'search placeholder still references removed Return data');
+assert(!app.includes('placeholder="VPS / 地区 / ASN / 回程"'), 'legacy Return search hint survived');
+assert(app.includes('没有匹配节点'), 'filtered-list empty state missing');
+assert(app.includes('有限额合计'), 'aggregate traffic semantics are still ambiguous');
+assert(app.includes('全部无限流量'), 'all-unlimited aggregate state missing');
+assert(app.includes('暂无近 7 日历史流量'), 'traffic empty-state wording not refined');
+
+const apiSource = fs.readFileSync('dist/js/api.js', 'utf8');
+assert(apiSource.includes("normalizedRange === '7D' || normalizedRange === '7d' ? 168"), 'API does not map 7D to 168 hours');
+assert(apiSource.includes('const seriesInFlight = Object.create(null)'), 'history RPC in-flight dedupe missing');
+assert(apiSource.includes('if (seriesInFlight[key]) return seriesInFlight[key]'), 'duplicate history RPCs are not coalesced');
+assert(apiSource.includes('maxCount: hours >= 168 ? 2400 : 4000'), '7D history is not capped for browser performance');
+assert(apiSource.includes('hours >= 168 ? 18000 : 12000'), '7D RPC timeout was not relaxed');
+
 const adapterSource = fixAdapter(fs.readFileSync('dist/js/lite-adapter.js', 'utf8'));
 const adapterSandbox = { window: {}, console, Date, Math, JSON, Number, String, Object, Array, RegExp, Map };
 vm.createContext(adapterSandbox);
@@ -67,4 +87,4 @@ assert(!lite.includes('Lite 后端 · 当前账期'), 'obsolete traffic source c
 assert(!lite.includes('normalizeLiteTrafficUI'), 'obsolete traffic DOM rewrite survived');
 assert(!lite.includes('setTextIfChanged'), 'obsolete traffic text mutation helper survived');
 
-console.log('screenshot regression fixes passed');
+console.log('runtime refinement checks passed');
