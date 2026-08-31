@@ -1,29 +1,50 @@
 # Line Grid — Komari / Lite 主题
 
-将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari 系列监控面板。当前仓库同时提供 `Lite-theme.json` 与 `komari-theme.json`，发布包可用于 Komari Lite 与旧 Komari。
+将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari 系列监控面板。当前仓库同时提供 `Lite-theme.json` 与 `komari-theme.json`；Lite 是当前主要适配目标，旧 manifest 仅用于安装兼容。
 
 <img width="430" height="307" alt="image" src="https://github.com/user-attachments/assets/c0a48171-4bc4-4d24-a261-1190163f85c0" /><img width="430" height="307" alt="image" src="https://github.com/user-attachments/assets/9f71965f-ebcd-426e-9701-5c9b44624ba2" />
 
-## Lite 迁移说明
+## Lite 流量架构
 
-Lite 版本不再由主题自己维护第二套流量账期状态：
+从 Lite 适配版开始，**Line Grid 不再拥有流量重置机制**。主题不保存、不编辑、不迁移，也不在浏览器中重新计算账期。
 
-- `common:getNodesLatestStatus` 返回的 `net_total_up/down` 作为 Lite 当前账期的权威流量值。
-- `public:queryMetrics` 仅用于历史小时/每日序列、图表和趋势分析，不再覆盖当前账期总量。
-- 每节点重置日直接使用 Lite Client 的 `traffic_reset_day`。
-- `traffic_reset_day = null` 表示跟随 Agent，`0` 表示关闭，`1~31` 表示每月对应日期。
-- Lite 的账期边界由后端统一计算；Line Grid 不再使用主题级 `billingTimeZone` 改写账期边界。
-- 旧 Line Grid 的 `trafficResetDay / trafficResetOverrides` 只用于一次性迁移，不再作为 Lite 的长期数据源。
-
-Lite 原生重置日迁移/编辑页：
+Lite 是唯一真相源：
 
 ```text
-/themes/line-grid/dist/admin-reset-editor.html
+Lite Client / trafficledger
+  ├─ traffic_reset_day              重置策略
+  ├─ effective_traffic_limit/type   当前有效额度/计费方式
+  ├─ calibrated net_total_up/down   当前账期权威流量
+  └─ Lite traffic calibration       账期边界与校准
+
+Lite Metric Store
+  └─ traffic.up / traffic.down      历史流量序列
+
+Line Grid
+  └─ 只读取并展示以上结果
 ```
 
-该页面需要 Lite 管理员会话，直接调用 `admin:listClients` / `admin:editClient`。检测到旧 Line Grid 账期设置时，可先转换到编辑表，确认后再写入 Lite 数据库。
+具体规则：
 
-### Lite deep-link / Dashboard 导航
+- `common:getNodesLatestStatus` 的 `net_total_up/down` 作为 Lite 当前账期的权威流量值。
+- 节点额度优先使用 Lite 的 `effective_traffic_limit / effective_traffic_type`。
+- `public:queryMetrics` 只用于近几日历史流量和图表，不覆盖当前账期总量。
+- Line Grid 不再提供 `trafficResetDay`、`billingTimeZone`、`trafficResetOverrides`。
+- Line Grid 不再提供自定义“流量重置日编辑器”或旧设置迁移器。
+- Line Grid 不再根据重置日在浏览器计算 `period_start / period_end`。
+- Lite 模式不再显示主题自行推导的“距重置 N 天”和“预计可撑过本账期”等预测。
+- 重置日、账期、流量校准和日账本统一在 Lite 自身后台管理。
+
+Lite 后端原生提供流量校准与日流量接口，包括：
+
+```text
+/api/admin/client/{uuid}/traffic-calibration
+/api/admin/client/{uuid}/traffic-daily
+```
+
+这些属于 Lite 管理能力，不由主题复制实现。
+
+## Lite deep-link / Dashboard 导航
 
 `Lite-theme.json` 使用 Lite 要求的普通路径：
 
@@ -32,7 +53,7 @@ Lite 原生重置日迁移/编辑页：
 /network/node/{uuid}/ping
 ```
 
-Line Grid 自身仍保留原 hash router。`dist/js/lite.js` 会在 `app.js` 启动前把上述 Lite 路径桥接为 Line Grid 内部路由，因此不需要重写主题主路由。
+Line Grid 自身仍保留 hash router。`dist/js/lite.js` 会在 `app.js` 启动前把上述 Lite 路径桥接为 Line Grid 内部路由，因此不需要重写主题主路由。
 
 Lite Dashboard 的丢包排行如果附带：
 
@@ -46,7 +67,8 @@ Lite Dashboard 的丢包排行如果附带：
 
 - 桌面端和移动端自适应节点列表、详情、网络与资源视图
 - RPC2 / Metric Store 实时状态、Ping 历史和流量历史
-- 节点搜索、异常筛选、流量耗尽预测和 Last Seen
+- Lite 当前账期流量与有效额度展示
+- 节点搜索、异常筛选和 Last Seen
 - Low / Medium / High 三档地球渲染精度
 - 节点地区、城市、经纬度、服务商、回程线路等扩展元数据
 - 管理员回程线路编辑
@@ -59,41 +81,39 @@ Lite Dashboard 的丢包排行如果附带：
 
 - `common:getNodes`
 - `common:getNodesLatestStatus`
-- `common:getRecords`
+- `common:getRecords`（Ping）
 - `common:getPublicInfo`
-- `public:queryMetrics`
+- `public:queryMetrics`（历史流量）
 - `common:getMe`
 - `admin:getClient`
-- `admin:listClients`
-- `admin:editClient`
+- `admin:editClient`（回程线路标签）
 
-## Lite 与旧 Komari 的账期差异
+## Lite 与旧 Komari
 
 ### Komari Lite
 
-以 Lite 后端为权威：
+Lite 后端完全负责流量生命周期：
 
 ```text
 Lite trafficledger
   -> 当前账期校准流量
   -> net_total_up/down
-  -> Line Grid 当前用量 / 配额 / 预测
+  -> Line Grid 当前用量
 
-Metric Store
-  -> traffic.up / traffic.down 历史序列
-  -> Line Grid 图表 / 日流量
+Lite effective traffic quota
+  -> effective_traffic_limit/type
+  -> Line Grid 配额展示
+
+Lite Metric Store
+  -> traffic.up / traffic.down
+  -> Line Grid 近几日历史图表
 ```
 
 ### 旧 Komari
 
-仍保留原有 Line Grid 兼容逻辑：
+仓库暂时保留 `komari-theme.json` 和旧 adapter，以避免安装兼容性被一次性打断；但 manifest 已不再暴露主题级流量重置配置。
 
-- `trafficResetDay`
-- `trafficResetOverrides`
-- `billingTimeZone`
-- 基于 Metric Store 重建主题侧账期
-
-因此仓库继续保留 `komari-theme.json`，但 Lite 会优先使用 `Lite-theme.json`。
+旧 adapter 中与旧后端兼容有关的历史代码不会参与 Lite 运行时。后续如果彻底停止支持旧 Komari，可单独删除这部分兼容层，而不影响 Lite 数据模型。
 
 ## 安装
 
@@ -118,7 +138,6 @@ komari-theme.json
 preview.svg
 dist/
   index.html
-  admin-reset-editor.html
   css/
   js/
   metadata/
@@ -139,13 +158,11 @@ dist/metadata/nodes.json
 - `provider_name` / `provider_url`
 - `region_country` / `region_name` / `region_city`
 - `longitude` / `latitude`
-- `traffic_reset_day`
-- `billing_timezone`
 - `cpu_threads`
 - `renewal_price_cny`
 - `return_routes`
 
-在 Lite 模式下，原生 Client 字段优先于同义主题元数据；`traffic_reset_day` 不应再通过 metadata 覆盖 Lite 后端配置。
+Lite 的流量重置和账期字段不通过 metadata 覆盖。
 
 ## GeoIP / ASN
 
@@ -156,7 +173,7 @@ GeoIP / ASN 默认关闭。可选择：
 - `ipwho.is`
 - `ipapi.co`
 
-只有完整且可公开路由的 IP 才允许发送给第三方 GeoIP 服务；被 Lite 隐藏、打码、私网、保留或无效的地址都会跳过外部查询。
+只有完整且可公开路由的 IP 才允许发送给第三方 GeoIP 服务；被 Lite 隐藏、打码、私网、文档网段、保留或无效的地址都会跳过外部查询。
 
 ## 开发与验证
 
@@ -169,11 +186,13 @@ node scripts/build-release.js --check
 测试会验证：
 
 - JavaScript 语法
-- Komari/Lite adapter 语义
+- Komari/Lite adapter 基础语义
 - Lite clean-path → hash-router deep-link 桥接
 - `ping_task` 自动选择对应 Ping Task
 - 双 manifest 一致性与 Lite navigation 合约
-- Lite 原生重置日编辑器不依赖旧后台 DOM
+- manifest 不再包含主题级流量重置设置
+- 发布包不再包含自定义重置日编辑器
+- Lite API 路径不再调用主题侧 `billingWindow`
 - GeoIP 公网 IP 门禁
 - 自包含 HTML 可重复构建
 - ZIP 完整性
