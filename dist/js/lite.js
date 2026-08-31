@@ -158,21 +158,6 @@
     return true;
   }
 
-  function normalizeBranding() {
-    global.document.querySelectorAll('.foot-meta').forEach(function (node) {
-      const text = String(node.textContent || '');
-      const next = text
-        .replace('Komari RPC2', 'RPC2')
-        .replace('Powered by Komari Monitor', 'Line Grid · Lite')
-        .replace('Line Grid · Komari / Lite', 'Line Grid · Lite');
-      if (next !== text) node.textContent = next;
-    });
-  }
-
-  function removeLegacyReturnUI() {
-    global.document.querySelectorAll('[data-page="routes"]').forEach(function (node) { node.remove(); });
-  }
-
   function normalizeLiteTrafficUI() {
     global.document.querySelectorAll('.page-traffic .traffic-forecast small').forEach(function (node) {
       setTextIfChanged(node, 'Lite 后端 · 当前账期');
@@ -196,8 +181,6 @@
   function refreshUICompatibility() {
     uiRefreshQueued = false;
     normalizeLegacyReturnHash();
-    removeLegacyReturnUI();
-    normalizeBranding();
     normalizeLiteTrafficUI();
     applyPingTaskFromQuery();
   }
