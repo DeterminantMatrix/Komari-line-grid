@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { slimApp } = require('./slim-app');
 const { slimDemo } = require('./slim-demo');
+const { slimCss } = require('./slim-css');
 
 const root = path.resolve(__dirname, '..');
 const templatePath = path.join(root, 'src/index.html');
@@ -29,7 +30,7 @@ function build() {
   let html = fs.readFileSync(templatePath, 'utf8');
   html = html.replace(/<link rel="stylesheet" data-inline-href="([^"]+)"[^>]*>/g, function (_m, rel) {
     const file = path.join(root, rel);
-    const css = inlineImageUrls(fs.readFileSync(file, 'utf8'), file);
+    const css = inlineImageUrls(slimCss(fs.readFileSync(file, 'utf8')), file);
     return '<style data-inline-source="' + rel + '">\n' + css + '\n</style>';
   });
   html = html.replace(/<script data-inline-metadata="([^"]+)"><\/script>/g, function (_m, rel) {
