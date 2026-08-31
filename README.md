@@ -23,6 +23,25 @@ Lite 原生重置日迁移/编辑页：
 
 该页面需要 Lite 管理员会话，直接调用 `admin:listClients` / `admin:editClient`。检测到旧 Line Grid 账期设置时，可先转换到编辑表，确认后再写入 Lite 数据库。
 
+### Lite deep-link / Dashboard 导航
+
+`Lite-theme.json` 使用 Lite 要求的普通路径：
+
+```text
+/node/{uuid}/overview
+/network/node/{uuid}/ping
+```
+
+Line Grid 自身仍保留原 hash router。`dist/js/lite.js` 会在 `app.js` 启动前把上述 Lite 路径桥接为 Line Grid 内部路由，因此不需要重写主题主路由。
+
+Lite Dashboard 的丢包排行如果附带：
+
+```text
+?ping_task=<task_id>
+```
+
+兼容层会自动进入节点 Ping 页面，并在对应 Ping Task 控件出现后自动选中它。
+
 ## 主要功能
 
 - 桌面端和移动端自适应节点列表、详情、网络与资源视图
@@ -151,8 +170,11 @@ node scripts/build-release.js --check
 
 - JavaScript 语法
 - Komari/Lite adapter 语义
-- 双 manifest 一致性
+- Lite clean-path → hash-router deep-link 桥接
+- `ping_task` 自动选择对应 Ping Task
+- 双 manifest 一致性与 Lite navigation 合约
 - Lite 原生重置日编辑器不依赖旧后台 DOM
+- GeoIP 公网 IP 门禁
 - 自包含 HTML 可重复构建
 - ZIP 完整性
 
