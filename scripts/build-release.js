@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { slimApp } = require('./slim-app');
+const { slimDemo } = require('./slim-demo');
 
 const root = path.resolve(__dirname, '..');
 const templatePath = path.join(root, 'src/index.html');
@@ -38,7 +39,7 @@ function build() {
   html = html.replace(/<script data-inline-src="([^"]+)"><\/script>/g, function (_m, rel) {
     let source = fs.readFileSync(path.join(root, rel), 'utf8');
     if (rel === 'dist/js/app.js') {
-      source = slimApp(source)
+      source = slimDemo(slimApp(source))
         .replace(/Powered by Komari Monitor/g, 'Line Grid · Lite')
         .replace(/Line Grid · Komari \/ Lite/g, 'Line Grid · Lite')
         .replace(/Komari RPC2/g, 'Lite RPC2')
