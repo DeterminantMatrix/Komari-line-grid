@@ -8,7 +8,9 @@ const { slimDemo } = require('./slim-demo');
 const { slimCss } = require('./slim-css');
 const { fixApp, fixCharts, fixAdapter, fixLite } = require('./runtime-fixes');
 const { fixAppTimeAxis, fixChartsTimeAxis } = require('./time-axis-fix');
-const { refineAdapter, refineApp, refineCharts, refineApi, refineLite, refineCss } = require('./refine-v051');
+const { refineAdapter } = require('./refine-v051-adapter');
+const { refineApp } = require('./refine-v051-app');
+const { refineCharts, refineApi, refineLite, refineCss } = require('./refine-v051-runtime');
 
 const root = path.resolve(__dirname, '..');
 const templatePath = path.join(root, 'src/index.html');
