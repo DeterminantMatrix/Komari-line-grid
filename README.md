@@ -1,8 +1,17 @@
 # Line Grid — Komari / Lite 主题
 
-将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari 系列监控面板。当前仓库同时提供 `Lite-theme.json` 与 `komari-theme.json`；Lite 是当前主要适配目标，旧 manifest 仅用于安装兼容。
+将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari 系列监控面板。当前 `main` 保留 v0.5.0 过渡状态；从 v0.5.1 开始，项目转为 **Lite-only**，不再继续兼容原版 Komari。
 
 <img width="430" height="307" alt="image" src="https://github.com/user-attachments/assets/c0a48171-4bc4-4d24-a261-1190163f85c0" /><img width="430" height="307" alt="image" src="https://github.com/user-attachments/assets/9f71965f-ebcd-426e-9701-5c9b44624ba2" />
+
+## 版本分支
+
+| 版本线 | 后端 | 状态 | 分支 |
+| --- | --- | --- | --- |
+| **v0.5.1+** | **Lite** | 当前开发线，Lite-only | [`release/v0.5.1`](https://github.com/DeterminantMatrix/Komari-line-grid/tree/release/v0.5.1) |
+| **v0.4.3** | 原版 Komari | Legacy，冻结维护 | [`release/v0.4.3`](https://github.com/DeterminantMatrix/Komari-line-grid/tree/release/v0.4.3) |
+
+需要原版 Komari 兼容时，请固定使用 **v0.4.3 / `release/v0.4.3`**。后续 Lite-only 重构只在 v0.5.1+ 版本线继续。
 
 ## Lite 流量架构
 
@@ -125,9 +134,7 @@ Lite Metric Store
 
 ### 旧 Komari
 
-仓库暂时保留 `komari-theme.json` 和旧 adapter，以避免安装兼容性被一次性打断；但 manifest 已不再暴露主题级流量重置配置。
-
-旧 adapter 中与旧后端兼容有关的历史代码不会参与 Lite 运行时。后续如果彻底停止支持旧 Komari，可单独删除这部分兼容层，而不影响 Lite 数据模型。
+原版 Komari 的兼容版本固定在 `release/v0.4.3`。`main` 中保留的旧兼容层仅属于 v0.5.0 过渡状态；v0.5.1+ 将按 Lite-only 方向删除，不再继续维护。
 
 ## 安装
 
