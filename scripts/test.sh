@@ -67,19 +67,22 @@ import json
 from zipfile import ZipFile
 version=json.load(open('Lite-theme.json'))['version']
 name=f'komari-line-grid-v{version}.zip'
-required={'Lite-theme.json','preview.svg','dist/index.html','dist/css/app.css','dist/js/app.js','dist/js/komari.js','dist/js/enrich.js','dist/js/lite.js','dist/metadata/nodes.json'}
+required={'Lite-theme.json','preview.svg','dist/index.html'}
 with ZipFile(name) as z:
     names=set(z.namelist())
     missing=sorted(required-names)
     if missing: raise SystemExit('release missing '+', '.join(missing))
+    extras=sorted(names-required)
+    if extras: raise SystemExit('Lite-only release contains redundant files: '+', '.join(extras))
     if 'komari-theme.json' in names: raise SystemExit('Lite-only release must not ship komari-theme.json')
-    if 'dist/admin-reset-editor.html' in names: raise SystemExit('release must not ship a theme-owned reset editor')
     lite=json.loads(z.read('Lite-theme.json'))
     if '#' in lite['navigation']['server_detail'] or '#' in lite['navigation']['server_network']:
         raise SystemExit('zip Lite navigation contains fragment')
     html=z.read('dist/index.html').decode('utf-8')
     if f'content="{version}"' not in html: raise SystemExit('zip index version mismatch')
-print('Lite-only zip complete')
+    if 'data-inline-src=' in html or 'data-inline-href=' in html or 'data-inline-metadata=' in html:
+        raise SystemExit('zip index is not self-contained')
+print('Lite-only minimal zip complete')
 PY
 
 echo 'all checks passed'
