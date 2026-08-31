@@ -7,6 +7,7 @@ const { slimApp } = require('./slim-app');
 const { slimDemo } = require('./slim-demo');
 const { slimCss } = require('./slim-css');
 const { fixApp, fixCharts, fixAdapter, fixLite } = require('./runtime-fixes');
+const { fixAppTimeAxis, fixChartsTimeAxis } = require('./time-axis-fix');
 
 const root = path.resolve(__dirname, '..');
 const templatePath = path.join(root, 'src/index.html');
@@ -41,14 +42,14 @@ function build() {
   html = html.replace(/<script data-inline-src="([^"]+)"><\/script>/g, function (_m, rel) {
     let source = fs.readFileSync(path.join(root, rel), 'utf8');
     if (rel === 'dist/js/app.js') {
-      source = fixApp(slimDemo(slimApp(source)))
+      source = fixAppTimeAxis(fixApp(slimDemo(slimApp(source))))
         .replace(/Powered by Komari Monitor/g, 'Line Grid · Lite')
         .replace(/Line Grid · Komari \/ Lite/g, 'Line Grid · Lite')
         .replace(/Komari RPC2/g, 'Lite RPC2')
         .replace(/komari-rpc2/g, 'lite-rpc2')
         .replace(/Komari/g, 'Lite');
     } else if (rel === 'dist/js/charts.js') {
-      source = fixCharts(source);
+      source = fixChartsTimeAxis(fixCharts(source));
     } else if (rel === 'dist/js/lite-adapter.js') {
       source = fixAdapter(source);
     } else if (rel === 'dist/js/lite.js') {
