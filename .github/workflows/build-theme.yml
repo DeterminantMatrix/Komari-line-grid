@@ -13,6 +13,8 @@ permissions:
 jobs:
   test-and-package:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,6 +22,20 @@ jobs:
           node-version: '22'
       - name: Test
         run: ./scripts/test.sh
+      - name: Sync generated release index on main
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- dist/index.html; then
+            exit 0
+          fi
+          VERSION="$(node -p "require('./Lite-theme.json').version")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist/index.html
+          git commit -m "build: sync v${VERSION} release index"
+          git push
       - name: Package
         run: ./scripts/package.sh
       - name: Upload theme package
