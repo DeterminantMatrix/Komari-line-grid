@@ -13,6 +13,7 @@ const { refineAdapter } = require('./refine-v051-adapter');
 const { refineApp } = require('./refine-v051-app');
 const { refineCharts, refineApi, refineLite, refineCss } = require('./refine-v051-runtime');
 const { refineAppVisual, refineChartsVisual, refineCssVisual } = require('./refine-v051-visual');
+const { refineFinalApp, refineFinalCss } = require('./refine-v051-final');
 
 const root = path.resolve(__dirname, '..');
 const templatePath = path.join(root, 'src/index.html');
@@ -37,7 +38,7 @@ function build() {
   let html = fs.readFileSync(templatePath, 'utf8');
   html = html.replace(/<link rel="stylesheet" data-inline-href="([^"]+)"[^>]*>/g, function (_m, rel) {
     const file = path.join(root, rel);
-    const css = refineCssVisual(refineCss(slimCss(fs.readFileSync(file, 'utf8'))));
+    const css = refineFinalCss(refineCssVisual(refineCss(slimCss(fs.readFileSync(file, 'utf8')))));
     return '<style data-inline-source="' + rel + '">\n' + inlineImageUrls(css, file) + '\n</style>';
   });
   html = html.replace(/<script data-inline-metadata="([^"]+)"><\/script>/g, function (_m, rel) {
@@ -53,7 +54,7 @@ function build() {
         .replace(/Komari RPC2/g, 'Lite RPC2')
         .replace(/komari-rpc2/g, 'lite-rpc2')
         .replace(/Komari/g, 'Lite');
-      source = refineAppVisual(refineApp(source));
+      source = refineFinalApp(refineAppVisual(refineApp(source)));
     } else if (rel === 'dist/js/charts.js') {
       source = refineChartsVisual(refineCharts(fixChartsTimeAxis(fixCharts(source))));
     } else if (rel === 'dist/js/lite-adapter.js') {
