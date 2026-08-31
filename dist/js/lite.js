@@ -2,14 +2,9 @@
   'use strict';
 
   const LINE_GRID_PAGES = ['overview', 'ping', 'traffic', 'routes', 'system'];
-  const LITE_TRAFFIC_LABELS = {
-    period: 'Lite 后端校准 · 当前账期',
-    forecast: 'Lite 当前账期 + Metric Store 历史',
-    history: 'Metric Store · 历史日流量',
-  };
   let appliedPingRoute = '';
   let uiRefreshQueued = false;
-  let liteRuntimeActive = false;
+  let liteActive = false;
 
   function safeSegment(value) {
     const raw = String(value || '');
@@ -48,69 +43,9 @@
     return nextHash;
   }
 
-  // Lite navigation manifests must use normal paths rather than URL fragments.
-  // Bridge those paths into Line Grid's existing hash router before app.js starts.
+  // Lite manifests use clean paths. Bridge them into Line Grid's hash router
+  // before app.js starts; this is navigation compatibility only.
   normalizeNavigationPath();
-
-  function scheduleUICompatibility() {
-    if (uiRefreshQueued) return;
-    uiRefreshQueued = true;
-    Promise.resolve().then(refreshUICompatibility);
-  }
-
-  function markLiteRuntime(payload) {
-    if (payload && payload._runtime === 'lite') {
-      liteRuntimeActive = true;
-      scheduleUICompatibility();
-    }
-    return payload;
-  }
-
-  function calcTraffic(up, down, type) {
-    if (global.KomariAdapt && typeof global.KomariAdapt.calcTraffic === 'function') {
-      return global.KomariAdapt.calcTraffic(up, down, type);
-    }
-    return Number(up || 0) + Number(down || 0);
-  }
-
-  function restoreLitePeriod(payload, latestRaw) {
-    if (!payload || payload._runtime !== 'lite' || !Array.isArray(payload.servers)) return payload;
-    markLiteRuntime(payload);
-    let latest = latestRaw && latestRaw.data && typeof latestRaw.data === 'object' ? latestRaw.data : (latestRaw || {});
-    if (Array.isArray(latest)) {
-      const mapped = {};
-      latest.forEach(function (row) {
-        const id = row && (row.client || row.uuid || row.id);
-        if (id) mapped[String(id)] = row;
-      });
-      latest = mapped;
-    }
-    payload.servers.forEach(function (server) {
-      const live = latest && latest[String(server.uuid)];
-      if (!live) return;
-      const up = Number(live.net_total_up);
-      const down = Number(live.net_total_down);
-      if (!Number.isFinite(up) && !Number.isFinite(down)) return;
-      const safeUp = Number.isFinite(up) && up >= 0 ? up : 0;
-      const safeDown = Number.isFinite(down) && down >= 0 ? down : 0;
-      const used = calcTraffic(safeUp, safeDown, server.traffic_limit_type);
-      server._lite_native_period_up = safeUp;
-      server._lite_native_period_down = safeDown;
-      server._lite_native_period_used = used;
-      server.traffic_period_up = safeUp;
-      server.traffic_period_down = safeDown;
-      server.traffic_period = used;
-      server.traffic_used_up = safeUp;
-      server.traffic_used_down = safeDown;
-      server.traffic_used = used;
-      server.traffic_source = 'lite_native_period';
-      server.traffic_period_complete = true;
-      server.traffic_lifetime_up = null;
-      server.traffic_lifetime_down = null;
-      server.traffic_lifetime = null;
-    });
-    return payload;
-  }
 
   function validPublicIPv4(raw) {
     const m = String(raw || '').match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -123,7 +58,9 @@
     if (a === 169 && b === 254) return false;
     if (a === 172 && b >= 16 && b <= 31) return false;
     if (a === 192 && b === 168) return false;
-    if (a === 198 && (b === 18 || b === 19)) return false;
+    if (a === 192 && b === 0) return false;
+    if (a === 198 && (b === 18 || b === 19 || b === 51)) return false;
+    if (a === 203 && b === 0) return false;
     return true;
   }
 
@@ -134,6 +71,7 @@
     if (/^f[cd]/.test(s)) return false;
     if (/^fe[89ab]/.test(s)) return false;
     if (/^ff/.test(s)) return false;
+    if (/^2001:db8(?::|$)/.test(s)) return false;
     return true;
   }
 
@@ -168,52 +106,70 @@
     });
   }
 
-  function replaceUnavailableLabel(selector, replacement) {
-    const nodes = global.document.querySelectorAll(selector);
-    nodes.forEach(function (node) {
-      if (String(node.textContent || '').trim() === '当前账期数据不可用') node.textContent = replacement;
+  function normalizeLiteTrafficUI() {
+    if (!liteActive) return;
+
+    // Reset-day configuration and countdown belong to Lite, not the theme.
+    global.document.querySelectorAll('.quota-reset').forEach(function (node) {
+      node.hidden = true;
     });
-  }
 
-  function normalizeLiteTrafficLabels() {
-    if (!liteRuntimeActive) return;
-    replaceUnavailableLabel('.page-traffic .traffic-forecast small', LITE_TRAFFIC_LABELS.forecast);
-    replaceUnavailableLabel('.page-traffic .kpi .sub', LITE_TRAFFIC_LABELS.period);
-    replaceUnavailableLabel('.page-traffic .chart-fill .hero-sub', LITE_TRAFFIC_LABELS.history);
-  }
+    // Theme-side forecasting depended on a browser-computed billing window.
+    // Hide it in Lite mode instead of recreating Lite's traffic policy.
+    global.document.querySelectorAll('.page-traffic .traffic-forecast').forEach(function (node) {
+      node.hidden = true;
+    });
 
-  function clarifyTrafficLoss() {
-    const cards = global.document.querySelectorAll('.sheet > .kpi article');
-    cards.forEach(function (card) {
-      const label = card.querySelector && card.querySelector('.lbl');
-      const sub = card.querySelector && card.querySelector('.sub');
-      const loss = card.querySelector && card.querySelector('.loss-value');
-      if (!label || !sub || !loss || String(label.textContent || '').trim() !== '流量累计') return;
-      if (String(sub.textContent || '').indexOf('丢包') >= 0) return;
-      loss.insertAdjacentText('beforebegin', '丢包 ');
+    global.document.querySelectorAll('.page-traffic .kpi article').forEach(function (article) {
+      const label = article.querySelector('.lbl');
+      if (!label || String(label.textContent || '').trim() !== '账期') return;
+      label.textContent = '账期管理';
+      const value = article.querySelector('.val');
+      const sub = article.querySelector('.sub');
+      if (value) value.textContent = 'Lite';
+      if (sub) sub.textContent = '后台统一管理';
+    });
+
+    global.document.querySelectorAll('.page-traffic .kpi article').forEach(function (article) {
+      const label = article.querySelector('.lbl');
+      const sub = article.querySelector('.sub');
+      if (!label || !sub) return;
+      const text = String(label.textContent || '').trim();
+      if (text === '本账期上行' || text === '本账期下行') sub.textContent = 'Lite 后端 · 当前账期';
+    });
+
+    global.document.querySelectorAll('.page-traffic .chart-fill .panel-h .hero-sub').forEach(function (node) {
+      node.textContent = 'Lite Metric Store · 历史流量';
+    });
+
+    // Overview's trailing percentage is packet loss, not quota usage.
+    global.document.querySelectorAll('.traffic-sub').forEach(function (node) {
+      const text = String(node.textContent || '').trim();
+      if (/^\d+(?:\.\d+)?%$/.test(text)) node.textContent = '丢包 ' + text;
     });
   }
 
   function refreshUICompatibility() {
     uiRefreshQueued = false;
     normalizeBranding();
-    normalizeLiteTrafficLabels();
-    clarifyTrafficLoss();
+    normalizeLiteTrafficUI();
     applyPingTaskFromQuery();
+  }
+
+  function scheduleUICompatibility() {
+    if (uiRefreshQueued) return;
+    uiRefreshQueued = true;
+    Promise.resolve().then(refreshUICompatibility);
   }
 
   if (global.ProbeAPI && typeof global.ProbeAPI.fetchServers === 'function') {
     const originalFetchServers = global.ProbeAPI.fetchServers;
     global.ProbeAPI.fetchServers = function () {
-      return Promise.resolve(originalFetchServers.apply(this, arguments)).then(markLiteRuntime);
-    };
-  }
-
-  if (global.KomariAdapt && typeof global.KomariAdapt.mergeLatest === 'function') {
-    const originalMergeLatest = global.KomariAdapt.mergeLatest;
-    global.KomariAdapt.mergeLatest = function (payload, latestRaw) {
-      const result = originalMergeLatest(payload, latestRaw);
-      return restoreLitePeriod(result || payload, latestRaw);
+      return originalFetchServers.apply(this, arguments).then(function (payload) {
+        liteActive = !!(payload && payload._runtime === 'lite');
+        scheduleUICompatibility();
+        return payload;
+      });
     };
   }
 
@@ -227,7 +183,9 @@
         hidden.push([server, server._lookup_ip]);
         server._lookup_ip = '';
       });
-      return Promise.resolve(originalEnrichNodes(payload)).finally(function () {
+      return Promise.resolve().then(function () {
+        return originalEnrichNodes(payload);
+      }).finally(function () {
         hidden.forEach(function (item) { item[0]._lookup_ip = item[1]; });
       });
     };
@@ -252,12 +210,9 @@
 
   global.LineGridLite = {
     isPublicIPLiteral: isPublicIPLiteral,
-    restoreLitePeriod: restoreLitePeriod,
     navigationHashFromPath: navigationHashFromPath,
     normalizeNavigationPath: normalizeNavigationPath,
     applyPingTaskFromQuery: applyPingTaskFromQuery,
-    markLiteRuntime: markLiteRuntime,
-    normalizeLiteTrafficLabels: normalizeLiteTrafficLabels,
-    trafficLabels: Object.assign({}, LITE_TRAFFIC_LABELS),
+    isActive: function () { return liteActive; },
   };
 })(window);
