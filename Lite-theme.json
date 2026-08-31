@@ -7,8 +7,8 @@
   "url": "https://github.com/DeterminantMatrix/Komari-line-grid",
   "preview": "preview.svg",
   "navigation": {
-    "server_detail": "/#/{uuid}/overview",
-    "server_network": "/#/{uuid}/ping",
+    "server_detail": "/node/{uuid}/overview",
+    "server_network": "/network/node/{uuid}/ping",
     "ping_task_parameter": "ping_task"
   },
   "configuration": {
