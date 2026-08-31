@@ -1,0 +1,36 @@
+name: Release v0.5.7 once
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release-v057:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build and publish v0.5.7
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./Lite-theme.json').version")"
+          test "$VERSION" = "0.5.7"
+          ./scripts/test.sh
+          ASSET="komari-line-grid-v${VERSION}.zip"
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET" \
+              --target 499507bfe5d9e785057465b2abe84c188c644463 \
+              --title "Line Grid $TAG" \
+              --generate-notes
+          fi
