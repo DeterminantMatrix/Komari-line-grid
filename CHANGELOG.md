@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.9
+
+- Fix a v0.5.8 startup regression caused by a stale `base` export after removing legacy API-base compatibility.
+- Add a runtime initialization smoke test so undeclared globals in the pre-app runtime fail CI.
+
 ## v0.5.8
 
 - Flatten runtime into canonical `src/index.html`, `src/style.css`, and `src/app.js`; `dist/` contains only the generated page.
