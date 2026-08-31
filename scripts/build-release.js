@@ -8,6 +8,7 @@ const { slimDemo } = require('./slim-demo');
 const { slimCss } = require('./slim-css');
 const { fixApp, fixCharts, fixAdapter, fixLite } = require('./runtime-fixes');
 const { fixAppTimeAxis, fixChartsTimeAxis } = require('./time-axis-fix');
+const { refineLatency } = require('./refine-v051-latency');
 const { refineAdapter } = require('./refine-v051-adapter');
 const { refineApp } = require('./refine-v051-app');
 const { refineCharts, refineApi, refineLite, refineCss } = require('./refine-v051-runtime');
@@ -46,7 +47,7 @@ function build() {
   html = html.replace(/<script data-inline-src="([^"]+)"><\/script>/g, function (_m, rel) {
     let source = fs.readFileSync(path.join(root, rel), 'utf8');
     if (rel === 'dist/js/app.js') {
-      source = fixAppTimeAxis(fixApp(slimDemo(slimApp(source))))
+      source = refineLatency(fixAppTimeAxis(fixApp(slimDemo(slimApp(source)))))
         .replace(/Powered by Komari Monitor/g, 'Line Grid · Lite')
         .replace(/Line Grid · Komari \/ Lite/g, 'Line Grid · Lite')
         .replace(/Komari RPC2/g, 'Lite RPC2')
