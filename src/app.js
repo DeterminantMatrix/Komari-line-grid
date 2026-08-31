@@ -1137,7 +1137,6 @@
   }
 
   global.ProbeAPI = {
-    base: base,
     rpc: rpc,
     fetchServers: fetchServers,
     fetchPingOverview: fetchPingOverview,

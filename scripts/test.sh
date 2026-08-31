@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
-node --check src/app.js; node --check scripts/build-release.js; node scripts/build-release.js >/dev/null; node scripts/build-release.js --check >/dev/null
+node --check src/app.js; node --check scripts/build-release.js; node scripts/test-runtime-init.js; node scripts/build-release.js >/dev/null; node scripts/build-release.js --check >/dev/null
 node - <<'NODE'
 const fs=require('fs'), m=JSON.parse(fs.readFileSync('Lite-theme.json','utf8')), s=fs.readFileSync('src/app.js','utf8'), c=fs.readFileSync('src/style.css','utf8'), h=fs.readFileSync('dist/index.html','utf8');
 if(!/^\d+\.\d+\.\d+$/.test(m.version)||!h.includes(`name="line-grid-version" content="${m.version}"`)) throw new Error('version mismatch');
