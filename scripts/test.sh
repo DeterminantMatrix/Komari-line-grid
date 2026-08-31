@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-for file in dist/js/*.js scripts/build-release.js scripts/test-adapter.js scripts/test-lite.js; do
+for file in dist/js/*.js scripts/build-release.js scripts/slim-app.js scripts/test-adapter.js scripts/test-lite.js; do
   node --check "$file"
 done
 node scripts/test-adapter.js
@@ -74,6 +74,10 @@ if(!html.includes('RPC2')) throw new Error('RPC2 integration missing');
 if(/(?:src|href)="\.\/(?:js|css)\//.test(html)) throw new Error('release index must be self-contained');
 if(/data-inline-(?:src|href|metadata)=/.test(html)) throw new Error('release contains unresolved inline marker');
 if(!html.includes('data:image/png;base64,')) throw new Error('release grain image is not inlined');
+for(const forbidden of ['linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari','Powered by Komari Monitor','连接 Komari','Komari 数据读取失败','按 Komari 历史记录']) {
+  if(html.includes(forbidden)) throw new Error('shipped Lite runtime still contains legacy Return/Komari UI: '+forbidden);
+}
+if(!html.includes('Line Grid · Lite')) throw new Error('Lite-only runtime attribution missing');
 console.log('Lite-only json/ui invariants ok');
 NODE
 
@@ -98,6 +102,8 @@ with ZipFile(name) as z:
     if f'content="{version}"' not in html: raise SystemExit('zip index version mismatch')
     if 'data-inline-src=' in html or 'data-inline-href=' in html or 'data-inline-metadata=' in html:
         raise SystemExit('zip index is not self-contained')
+    for forbidden in ('linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari'):
+        if forbidden in html: raise SystemExit('zip runtime contains legacy Return code: '+forbidden)
 print('Lite-only minimal zip complete')
 PY
 
