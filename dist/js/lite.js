@@ -1,6 +1,51 @@
 (function (global) {
   'use strict';
 
+  const LINE_GRID_PAGES = ['overview', 'ping', 'traffic', 'routes', 'system'];
+  let appliedPingRoute = '';
+  let uiRefreshQueued = false;
+
+  function safeSegment(value) {
+    const raw = String(value || '');
+    try {
+      return encodeURIComponent(decodeURIComponent(raw));
+    } catch (e) {
+      return encodeURIComponent(raw);
+    }
+  }
+
+  function navigationHashFromPath(pathname, search) {
+    const parts = String(pathname || '/').split('/').filter(Boolean);
+    const params = new URLSearchParams(search || '');
+    const pingTask = String(params.get('ping_task') || '').trim();
+
+    if (parts[0] === 'node' && parts[1]) {
+      let page = LINE_GRID_PAGES.indexOf(parts[2]) >= 0 ? parts[2] : 'overview';
+      if (pingTask) page = 'ping';
+      return '#/node/' + safeSegment(parts[1]) + '/' + page;
+    }
+
+    if ((parts[0] === 'network' || parts[0] === 'resource') && parts[1] === 'node' && parts[2]) {
+      let page = LINE_GRID_PAGES.indexOf(parts[3]) >= 0 ? parts[3] : (parts[0] === 'network' ? 'ping' : 'overview');
+      if (pingTask) page = 'ping';
+      return '#/' + parts[0] + '/node/' + safeSegment(parts[2]) + '/' + page;
+    }
+
+    return '';
+  }
+
+  function normalizeNavigationPath() {
+    if (global.location.hash && global.location.hash !== '#') return '';
+    const nextHash = navigationHashFromPath(global.location.pathname, global.location.search);
+    if (!nextHash) return '';
+    global.history.replaceState(global.history.state, '', global.location.pathname + global.location.search + nextHash);
+    return nextHash;
+  }
+
+  // Lite navigation manifests must use normal paths rather than URL fragments.
+  // Bridge those paths into Line Grid's existing hash router before app.js starts.
+  normalizeNavigationPath();
+
   function calcTraffic(up, down, type) {
     if (global.KomariAdapt && typeof global.KomariAdapt.calcTraffic === 'function') {
       return global.KomariAdapt.calcTraffic(up, down, type);
@@ -77,6 +122,43 @@
     return raw.indexOf(':') >= 0 ? validPublicIPv6(raw) : validPublicIPv4(raw);
   }
 
+  function applyPingTaskFromQuery() {
+    const taskID = String(new URLSearchParams(global.location.search).get('ping_task') || '').trim();
+    if (!taskID || !/\/ping$/.test(String(global.location.hash || ''))) return false;
+    const routeKey = String(global.location.hash || '') + '|' + taskID;
+    if (appliedPingRoute === routeKey) return false;
+    const buttons = global.document.querySelectorAll('[data-latency-target]');
+    for (let i = 0; i < buttons.length; i += 1) {
+      if (String(buttons[i].getAttribute('data-latency-target') || '') !== taskID) continue;
+      appliedPingRoute = routeKey;
+      buttons[i].click();
+      return true;
+    }
+    return false;
+  }
+
+  function normalizeBranding() {
+    const nodes = global.document.querySelectorAll('.foot-meta');
+    nodes.forEach(function (node) {
+      const text = String(node.textContent || '');
+      let next = text.replace('Komari RPC2', 'RPC2');
+      next = next.replace('Powered by Komari Monitor', 'Line Grid · Komari / Lite');
+      if (next !== text) node.textContent = next;
+    });
+  }
+
+  function refreshUICompatibility() {
+    uiRefreshQueued = false;
+    normalizeBranding();
+    applyPingTaskFromQuery();
+  }
+
+  function scheduleUICompatibility() {
+    if (uiRefreshQueued) return;
+    uiRefreshQueued = true;
+    Promise.resolve().then(refreshUICompatibility);
+  }
+
   if (global.KomariAdapt && typeof global.KomariAdapt.mergeLatest === 'function') {
     const originalMergeLatest = global.KomariAdapt.mergeLatest;
     global.KomariAdapt.mergeLatest = function (payload, latestRaw) {
@@ -101,8 +183,28 @@
     };
   }
 
+  if (global.document.readyState === 'loading') {
+    global.document.addEventListener('DOMContentLoaded', scheduleUICompatibility, { once: true });
+  } else {
+    scheduleUICompatibility();
+  }
+  global.addEventListener('hashchange', function () {
+    appliedPingRoute = '';
+    scheduleUICompatibility();
+  });
+  if (global.MutationObserver) {
+    new global.MutationObserver(scheduleUICompatibility).observe(global.document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  }
+
   global.LineGridLite = {
     isPublicIPLiteral: isPublicIPLiteral,
     restoreLitePeriod: restoreLitePeriod,
+    navigationHashFromPath: navigationHashFromPath,
+    normalizeNavigationPath: normalizeNavigationPath,
+    applyPingTaskFromQuery: applyPingTaskFromQuery,
   };
 })(window);
