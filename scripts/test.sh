@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-for file in dist/js/*.js scripts/build-release.js scripts/slim-app.js scripts/test-adapter.js scripts/test-lite.js; do
+for file in dist/js/*.js scripts/build-release.js scripts/slim-app.js scripts/slim-demo.js scripts/slim-css.js scripts/test-adapter.js scripts/test-lite.js; do
   node --check "$file"
 done
 node scripts/test-adapter.js
@@ -16,6 +16,7 @@ const fs=require('fs');
 for(const f of ['Lite-theme.json','dist/metadata/nodes.json','dist/metadata/nodes.json.example']) JSON.parse(fs.readFileSync(f,'utf8'));
 if(fs.existsSync('komari-theme.json')) throw new Error('v0.5.1+ must be Lite-only; komari-theme.json must not exist');
 if(fs.existsSync('dist/js/komari.js')) throw new Error('legacy Komari adapter must be removed');
+if(fs.existsSync('dist/js/data.js')) throw new Error('production demo dataset must be removed');
 if(!fs.existsSync('dist/js/lite-adapter.js')) throw new Error('Lite adapter missing');
 const lite=JSON.parse(fs.readFileSync('Lite-theme.json','utf8'));
 if(lite.short!=='line-grid') throw new Error('theme short mismatch');
@@ -47,10 +48,10 @@ for(const forbidden of ['trafficResetOverrides','trafficResetDay','billingWindow
 }
 
 const liteShim=fs.readFileSync('dist/js/lite.js','utf8');
-for(const token of ['navigationHashFromPath','normalizeNavigationPath','normalizeLegacyReturnHash','ping_task','data-latency-target','setTextIfChanged','applyLiteDisplayWindows','liteDisplayWindow','removeLegacyReturnUI','Line Grid · Lite']) {
+for(const token of ['navigationHashFromPath','normalizeNavigationPath','normalizeLegacyReturnHash','ping_task','data-latency-target','setTextIfChanged','applyLiteDisplayWindows','liteDisplayWindow']) {
   if(!liteShim.includes(token)) throw new Error('Lite runtime bridge missing '+token);
 }
-for(const forbidden of ['trafficResetOverrides','trafficResetDay','admin-reset-editor','admin:editClient','applyLiteNodeMetadata','sortLiteServers',"rpc('common:getNodes'"]) {
+for(const forbidden of ['trafficResetOverrides','trafficResetDay','admin-reset-editor','admin:editClient','applyLiteNodeMetadata','sortLiteServers',"rpc('common:getNodes'",'removeLegacyReturnUI','normalizeBranding','Komari']) {
   if(liteShim.includes(forbidden)) throw new Error('Lite runtime contains redundant/legacy logic: '+forbidden);
 }
 if(/traffic-forecast[\s\S]{0,180}\.hidden\s*=\s*true/.test(liteShim)) throw new Error('Lite runtime must not hide Traffic forecast UI');
@@ -67,6 +68,7 @@ for(const required of ['common:getNodes','common:getNodesLatestStatus','common:g
 
 const source=fs.readFileSync('src/index.html','utf8');
 if(!source.includes('dist/js/lite-adapter.js') || source.includes('dist/js/komari.js')) throw new Error('source index adapter wiring is not Lite-only');
+if(source.includes('dist/js/data.js')) throw new Error('source index still loads demo dataset');
 const html=fs.readFileSync('dist/index.html','utf8');
 if(!html.includes(`name="line-grid-version" content="${lite.version}"`)) throw new Error('release version marker missing');
 if(!html.includes('<title>Line Grid</title>')) throw new Error('Line Grid title missing');
@@ -74,8 +76,8 @@ if(!html.includes('RPC2')) throw new Error('RPC2 integration missing');
 if(/(?:src|href)="\.\/(?:js|css)\//.test(html)) throw new Error('release index must be self-contained');
 if(/data-inline-(?:src|href|metadata)=/.test(html)) throw new Error('release contains unresolved inline marker');
 if(!html.includes('data:image/png;base64,')) throw new Error('release grain image is not inlined');
-for(const forbidden of ['linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari','Powered by Komari Monitor','连接 Komari','Komari 数据读取失败','按 Komari 历史记录']) {
-  if(html.includes(forbidden)) throw new Error('shipped Lite runtime still contains legacy Return/Komari UI: '+forbidden);
+for(const forbidden of ['linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari','Powered by Komari Monitor','连接 Komari','Komari 数据读取失败','按 Komari 历史记录','ProbeDemo','demoMode','tickDemo','演示数据','data-inline-source="dist/js/data.js"']) {
+  if(html.includes(forbidden)) throw new Error('shipped Lite runtime still contains legacy/demo code: '+forbidden);
 }
 if(!html.includes('Line Grid · Lite')) throw new Error('Lite-only runtime attribution missing');
 console.log('Lite-only json/ui invariants ok');
@@ -102,8 +104,8 @@ with ZipFile(name) as z:
     if f'content="{version}"' not in html: raise SystemExit('zip index version mismatch')
     if 'data-inline-src=' in html or 'data-inline-href=' in html or 'data-inline-metadata=' in html:
         raise SystemExit('zip index is not self-contained')
-    for forbidden in ('linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari'):
-        if forbidden in html: raise SystemExit('zip runtime contains legacy Return code: '+forbidden)
+    for forbidden in ('linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari','ProbeDemo','demoMode','tickDemo','演示数据','data-inline-source="dist/js/data.js"'):
+        if forbidden in html: raise SystemExit('zip runtime contains legacy/demo code: '+forbidden)
 print('Lite-only minimal zip complete')
 PY
 
