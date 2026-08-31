@@ -39,6 +39,9 @@ function build() {
     let source = fs.readFileSync(path.join(root, rel), 'utf8');
     if (rel === 'dist/js/app.js') {
       source = slimApp(source)
+        .replace(/Powered by Komari Monitor/g, 'Line Grid · Lite')
+        .replace(/Line Grid · Komari \/ Lite/g, 'Line Grid · Lite')
+        .replace(/Komari RPC2/g, 'Lite RPC2')
         .replace(/komari-rpc2/g, 'lite-rpc2')
         .replace(/Komari/g, 'Lite');
     }
