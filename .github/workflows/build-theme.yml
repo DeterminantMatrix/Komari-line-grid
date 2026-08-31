@@ -22,6 +22,7 @@ jobs:
         run: |
           ./scripts/test.sh
           node scripts/test-post-release-audit.js
+          node scripts/test-lite-native-features.js
       - name: Package
         run: ./scripts/package.sh
       - name: Upload theme package
