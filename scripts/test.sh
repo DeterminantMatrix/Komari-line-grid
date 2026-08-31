@@ -3,13 +3,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-for file in dist/js/*.js scripts/build-release.js scripts/slim-app.js scripts/slim-demo.js scripts/slim-css.js scripts/runtime-fixes.js scripts/time-axis-fix.js scripts/refine-v051.js scripts/refine-v051-adapter.js scripts/refine-v051-app.js scripts/refine-v051-runtime.js scripts/refine-v051-visual.js scripts/test-adapter.js scripts/test-lite.js scripts/test-runtime-fixes.js scripts/test-time-axis.js; do
+for file in dist/js/*.js scripts/build-release.js scripts/slim-app.js scripts/slim-demo.js scripts/slim-css.js scripts/runtime-fixes.js scripts/time-axis-fix.js scripts/refine-v051.js scripts/refine-v051-adapter.js scripts/refine-v051-app.js scripts/refine-v051-latency.js scripts/refine-v051-runtime.js scripts/refine-v051-visual.js scripts/refine-v051-final.js scripts/test-adapter.js scripts/test-lite.js scripts/test-runtime-fixes.js scripts/test-time-axis.js scripts/test-final-polish.js; do
   node --check "$file"
 done
 node scripts/test-adapter.js
 node scripts/test-lite.js
 node scripts/test-runtime-fixes.js
 node scripts/test-time-axis.js
+node scripts/test-final-polish.js
 node scripts/build-release.js >/dev/null
 node scripts/build-release.js --check
 
@@ -91,7 +92,10 @@ for(const required of [
   '["磁盘总量", fmtBytes(s.disk_total, 1)]','function systemAsnText(server)','is-compact-system',
   'function resourceWeekRows(servers)','/7 天有记录','最高项排序 · 离线 ','resource-heat-wrap',
   'maxBarWidth: 46','const slotW = w / Math.max(downs.length, 1)','已过期 ','今天到期','无历史记录',
-  'setTimeout(refreshUICompatibility, 0)'
+  'setTimeout(refreshUICompatibility, 0)',
+  'function anomalyDetails(server)','function anomalyBadgeHTML(server)','key: \'resource\'','高资源 ',
+  'function financeSummaryHTML(rows, masked)','月均总计','年化预算','剩余价值','到期风险','原始账单','expiry-cell',
+  'slab-grid slab-grid-final','.finance-summary','.page-ping .targets','.page-traffic .day-grid','.page-system .spec'
 ]) {
   if(!html.includes(required)) throw new Error('shipped runtime missing regression/refinement fix: '+required);
 }
@@ -100,7 +104,7 @@ for(const forbidden of [
   'Powered by Komari Monitor','连接 Komari','Komari 数据读取失败','按 Komari 历史记录','ProbeDemo','demoMode','tickDemo','演示数据',
   'data-inline-source="dist/js/data.js"','Lite 后端 · 当前账期','sec / U.DAY','function maskIP(','无限额',
   'placeholder="VPS / 地区 / ASN / 回程"','new global.MutationObserver(','function sparkFromSeries(','fetch(\'metadata/nodes.json\'',
-  's.cpu_cores == null ? "—" : s.cpu_cores'
+  's.cpu_cores == null ? "—" : s.cpu_cores','function nfmt(','function monthlyCostText(','function expiryShortText('
 ]) {
   if(html.includes(forbidden)) throw new Error('shipped Lite runtime still contains legacy/demo/redundant/misleading code: '+forbidden);
 }
@@ -136,7 +140,8 @@ with ZipFile(name) as z:
         'const liveRamTotal = numberOrNull(live.ram_total)','["内存 / Swap", fmtBytes(s.mem_total, 1) + " / " + fmtBytes(s.swap_total, 1)]',
         '["磁盘总量", fmtBytes(s.disk_total, 1)]','function systemAsnText(server)','is-compact-system','maxBarWidth: 46',
         'function resourceWeekRows(servers)','/7 天有记录','resource-heat-wrap','已过期 ','今天到期',
-        'setTimeout(refreshUICompatibility, 0)'
+        'setTimeout(refreshUICompatibility, 0)','function anomalyDetails(server)','function financeSummaryHTML(rows, masked)',
+        '月均总计','原始账单','slab-grid slab-grid-final','.finance-summary','.page-ping .targets'
     )
     for required_text in required_texts:
         if required_text not in html: raise SystemExit('zip runtime missing refinement fix: '+required_text)
@@ -144,7 +149,8 @@ with ZipFile(name) as z:
         'linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari',
         'ProbeDemo','demoMode','tickDemo','演示数据','data-inline-source="dist/js/data.js"','Lite 后端 · 当前账期',
         'sec / U.DAY','function maskIP(','无限额','placeholder="VPS / 地区 / ASN / 回程"','new global.MutationObserver(',
-        'function sparkFromSeries(',"fetch('metadata/nodes.json'",'s.cpu_cores == null ? "—" : s.cpu_cores'
+        'function sparkFromSeries(',"fetch('metadata/nodes.json'",'s.cpu_cores == null ? "—" : s.cpu_cores',
+        'function nfmt(','function monthlyCostText(','function expiryShortText('
     )
     for text in forbidden:
         if text in html: raise SystemExit('zip runtime contains legacy/demo/redundant/misleading code: '+text)
