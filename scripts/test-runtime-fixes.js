@@ -16,8 +16,11 @@ assert(app.includes('value < 86400'), 'uptime formatter did not become numeric-s
 assert(!app.includes('sec / U.DAY'), 'NaN-prone uptime formatter survived');
 assert(app.includes('idleMs: 64'), 'Medium globe redraw cadence not fixed');
 assert(app.includes('dt * 0.0075'), 'globe rotation speed not fixed');
-assert(app.includes('无限额，无需额度预测'), 'unlimited traffic forecast copy missing');
+assert(app.includes('无限流量，无需额度预测'), 'unlimited traffic forecast copy missing');
 assert(app.includes('!limit ? "无限流量"'), 'unlimited node reset label is not explicit');
+assert(app.includes('无限流量 · 不设重置'), 'unlimited traffic cycle semantics missing');
+assert(app.includes("unlimitedTraffic ? '不重置'"), 'unlimited traffic cycle card is not explicit');
+assert(!app.includes('无限额'), 'obsolete unlimited-quota wording survived');
 assert(app.includes("'已有 ' + ctx.last7.length + ' 天历史'"), 'traffic history count label missing');
 assert(app.includes('["IPv4", s.ipv4 || "—"]'), 'System page still masks backend-authorized IPv4');
 assert(app.includes('class="node-ip"'), 'node list IP display missing');
