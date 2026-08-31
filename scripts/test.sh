@@ -35,14 +35,21 @@ for(const [name,manifest] of [['Lite',lite],['legacy',legacy]]) {
 }
 if(fs.existsSync('dist/admin-reset-editor.html')) throw new Error('theme-owned traffic reset editor must be removed');
 const liteConfig=lite.configuration && lite.configuration.data || [];
+const offline=liteConfig.find(x=>x.key==='offlineServerPosition');
+if(!offline || offline.default!=='Keep') throw new Error('Lite default node order must preserve backend order');
 const geo=liteConfig.find(x=>x.key==='geoIpProvider');
 if(!geo || geo.default!=='ip.sb') throw new Error('GeoIP provider default missing');
 const fallback=liteConfig.find(x=>x.key==='geoIpFallback');
 if(!fallback || fallback.default!==false) throw new Error('GeoIP fallback default must be false');
 const liteShim=fs.readFileSync('dist/js/lite.js','utf8');
-for(const token of ['navigationHashFromPath','normalizeNavigationPath','ping_task','data-latency-target','Line Grid · Komari / Lite']) {
+for(const token of ['navigationHashFromPath','normalizeNavigationPath','ping_task','data-latency-target','Line Grid · Komari / Lite','setTextIfChanged','applyLiteNodeMetadata','liteDisplayWindow']) {
   if(!liteShim.includes(token)) throw new Error('Lite compatibility shim missing '+token);
 }
+for(const forbidden of ['trafficResetOverrides','trafficResetDay','admin-reset-editor','admin:editClient']) {
+  if(liteShim.includes(forbidden)) throw new Error('Lite runtime reintroduced theme-owned traffic reset state: '+forbidden);
+}
+if(/traffic-forecast[\s\S]{0,180}\.hidden\s*=\s*true/.test(liteShim)) throw new Error('Lite runtime must not hide Traffic forecast UI');
+if(/quota-reset[\s\S]{0,180}\.hidden\s*=\s*true/.test(liteShim)) throw new Error('Lite runtime must not hide reset countdown UI');
 const api=fs.readFileSync('dist/js/api.js','utf8');
 for(const forbidden of ['KomariAdapt.billingWindow','trafficResetOverrides','billing_timezone = \'Asia/Shanghai\'']) {
   if(api.includes(forbidden)) throw new Error('Lite API path still owns traffic-cycle semantics: '+forbidden);
