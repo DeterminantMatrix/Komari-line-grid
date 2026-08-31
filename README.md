@@ -1,21 +1,46 @@
-# Line Grid — Komari / Lite 主题
+# Line Grid — Lite Theme
 
-将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Komari 系列监控面板。当前 `main` 保留 v0.5.0 过渡状态；从 v0.5.1 开始，项目转为 **Lite-only**，不再继续兼容原版 Komari。
+将 `selkk-lab/mmwx-theme-line-grid` 的视觉、布局和交互移植到 Lite 公共监控主题。
+
+> **当前版本：v0.5.6。** 从 v0.5.1 开始，Line Grid 仅面向 Lite；原版 Komari 兼容线冻结在 v0.4.3。
 
 <img width="430" height="307" alt="image" src="https://github.com/user-attachments/assets/c0a48171-4bc4-4d24-a261-1190163f85c0" /><img width="430" height="307" alt="image" src="https://github.com/user-attachments/assets/9f71965f-ebcd-426e-9701-5c9b44624ba2" />
 
-## 版本分支
+## 版本线
 
-| 版本线 | 后端 | 状态 | 分支 |
+| 版本 | 后端 | 状态 | 分支 |
 | --- | --- | --- | --- |
-| **v0.5.1+** | **Lite** | 当前开发线，Lite-only | [`release/v0.5.1`](https://github.com/DeterminantMatrix/Komari-line-grid/tree/release/v0.5.1) |
+| **v0.5.6** | **Lite** | 当前稳定线，Lite-only | [`main`](https://github.com/DeterminantMatrix/Komari-line-grid/tree/main) |
 | **v0.4.3** | 原版 Komari | Legacy，冻结维护 | [`release/v0.4.3`](https://github.com/DeterminantMatrix/Komari-line-grid/tree/release/v0.4.3) |
 
-需要原版 Komari 兼容时，请固定使用 **v0.4.3 / `release/v0.4.3`**。后续 Lite-only 重构只在 v0.5.1+ 版本线继续。
+需要原版 Komari 兼容时，请固定使用 **v0.4.3 / `release/v0.4.3`**。v0.5.1 及以后版本不保证可在原版 Komari 上安装或运行。
+
+## v0.5.6 架构原则
+
+Line Grid 在 Lite 上定位为尽可能轻的 **只读展示层**：
+
+```text
+Lite
+  ├─ Client / trafficledger     节点、额度、流量、重置策略
+  ├─ Metric Store               Ping / 流量历史
+  ├─ Return Route               三网回程探测与状态
+  ├─ Billing / Cost Center      成本与到期信息
+  └─ System UI                  管理功能
+          │
+          ▼
+Line Grid Public Theme
+  └─ 读取 + 展示 + 轻量展示层计算
+```
+
+原则：
+
+- Lite 是节点、流量、账期、额度、排序和管理状态的唯一真相源。
+- Line Grid 不再建立第二套流量重置配置，也不写回 Lite 客户端配置。
+- Line Grid 不再维护原版 Komari 的兼容数据模型、Return tags 或旧 adapter。
+- Lite 已有的管理功能优先直接使用 Lite System UI。
+- 主题只保留公共展示层真正有价值的能力，例如 Globe、城市/坐标增强、异常摘要、费用聚合和紧凑可视化。
 
 ## Lite 流量架构
-
-从 Lite 适配版开始，**Line Grid 不再拥有独立的流量重置机制**。主题不保存、不编辑、不迁移第二套重置配置，Lite 是流量账期与计费状态的唯一真相源。
 
 ```text
 Lite Client / trafficledger
@@ -33,168 +58,107 @@ Line Grid
 
 具体规则：
 
-- `common:getNodesLatestStatus` 的 `net_total_up/down` 作为 Lite 当前账期的权威流量值。
+- `common:getNodesLatestStatus` 的 `net_total_up/down` 作为当前账期权威流量。
 - 节点额度使用 Lite 的 `effective_traffic_limit / effective_traffic_type`。
-- `public:queryMetrics` 只用于历史流量、日流量图表和展示层趋势分析，不覆盖当前账期总量。
-- Line Grid 不提供 `trafficResetDay`、`billingTimeZone`、`trafficResetOverrides`。
-- Line Grid 不提供自定义重置日编辑器，也不迁移旧主题重置配置。
-- Lite 原生 `traffic_reset_day` 可以被 Line Grid 读取，用于显示“距重置 N 天”和账期起止日期；这一计算只影响 UI，不参与流量统计、校准或后台配置。
-- Lite 的账期规则使用 Asia/Shanghai；Line Grid 的显示窗口按相同规则镜像，并处理每月 29/30/31 日的月底截断。
-- Traffic 页的额度耗尽预测属于展示层预测：以 Lite 当前用量、Lite 限额、Metric Store 历史流量和 Lite 重置日为输入，不写回 Lite，也不改变任何账期状态。
-- 重置配置、流量校准和日账本始终统一在 Lite 后台管理。
+- `public:queryMetrics` 仅用于历史流量和趋势展示，不覆盖当前账期总量。
+- 重置配置、流量校准和日账本统一由 Lite 后台管理。
+- Line Grid 可根据 Lite 提供的重置日显示“距重置 N 天”和账期范围，但不写回 Lite。
 
-Lite 后端原生提供流量管理接口，包括：
+## 节点顺序与导航
 
-```text
-/api/admin/client/{uuid}/traffic-calibration
-/api/admin/client/{uuid}/traffic-daily
-```
-
-这些属于 Lite 管理能力，不由主题复制实现。
-
-## Lite 节点顺序
-
-Lite 后端的默认节点顺序是：
+Line Grid 跟随 Lite 原生节点顺序：
 
 ```text
 weight ASC → created_at ASC → uuid ASC
 ```
 
-`common:getNodes` 最终返回 UUID map，因此 JSON 对象本身不能可靠表达查询顺序。Line Grid 会读取 Lite 节点的 `weight / created_at / uuid` 重建这一原生顺序。
-
-Lite manifest 的 `offlineServerPosition` 默认值为 `Keep`，所以默认不会因为节点离线而再次改变 Lite 后台顺序。用户主动选择 First / Last 时才进行额外位置调整。
-
-## Lite deep-link / Dashboard 导航
-
-`Lite-theme.json` 使用 Lite 要求的普通路径：
+`Lite-theme.json` 使用 Lite 普通路径：
 
 ```text
 /node/{uuid}/overview
 /network/node/{uuid}/ping
 ```
 
-Line Grid 自身仍保留 hash router。`dist/js/lite.js` 会在 `app.js` 启动前把上述 Lite 路径桥接为 Line Grid 内部路由。
-
-Lite Dashboard 的丢包排行如果附带：
-
-```text
-?ping_task=<task_id>
-```
-
-兼容层会自动进入节点 Ping 页面并选择对应 Ping Task。
+并支持 Lite Dashboard 的 `ping_task` deep link。
 
 ## 主要功能
 
-- 桌面端和移动端自适应节点列表、详情、网络与资源视图
-- RPC2 / Metric Store 实时状态、Ping 历史和流量历史
-- Lite 当前账期流量、有效额度、重置倒计时与展示层预测
-- 按 Lite 原生顺序展示节点
-- 节点搜索、异常筛选和 Last Seen
-- Low / Medium / High 三档地球渲染精度
-- 节点地区、城市、经纬度、服务商、回程线路等扩展元数据
-- 管理员回程线路编辑
-- 财务信息按币种聚合和续费提醒
-- GeoIP / ASN 可选增强，并限制为完整公网 IP 才允许外发查询
+- 桌面端与移动端节点 List / Grid / Column 视图
+- Overview / Latency / Traffic / System 节点详情
+- Lite RPC2 实时状态和 Metric Store Ping / 流量历史
+- 1h / 6h / 24h / 7D 延迟范围与多 Ping Task 合并
+- Lite 当前账期流量、有效额度、重置倒计时与流量预测
+- 节点搜索、Last Seen 与异常筛选
+- 异常原因提示：离线、高延迟、高丢包、高资源、高流量、临期/过期
+- Low / Medium / High 三档 Globe 渲染精度
+- 城市、经纬度、服务商和可选 GeoIP / ASN 增强
+- 费用中心：月均总计、年化预算、剩余价值、到期风险、原始账单与续费明细
+- 移动端节点详情和各视图信息密度统一优化
 
-## 数据接口
+## 主要数据接口
 
-主题主要使用：
-
-- `common:getNodes`
-- `common:getNodesLatestStatus`
-- `common:getRecords`（Ping）
-- `common:getPublicInfo`
-- `public:queryMetrics`（历史流量）
-- `common:getMe`
-- `admin:getClient`
-- `admin:editClient`（仅用于 Line Grid 的回程线路标签编辑，不用于流量重置）
-
-## Lite 与旧 Komari
-
-### Komari Lite
+v0.5.6 只读取 Lite 公共接口：
 
 ```text
-Lite trafficledger
-  -> 当前账期校准流量
-  -> net_total_up/down
-  -> Line Grid 当前用量
-
-Lite effective traffic quota
-  -> effective_traffic_limit/type
-  -> Line Grid 配额展示
-
-Lite traffic_reset_day
-  -> Line Grid 重置日期/倒计时显示
-  -> 不写回、不参与计费
-
-Lite Metric Store
-  -> traffic.up / traffic.down
-  -> Line Grid 历史图表/展示层预测
+common:getNodes
+common:getNodesLatestStatus
+common:getPublicInfo
+common:getRecords
+public:queryMetrics
+common:getMe
 ```
 
-### 旧 Komari
+管理员功能交给 Lite System UI；主题运行时不依赖 `admin:getClient / admin:editClient`。
 
-原版 Komari 的兼容版本固定在 `release/v0.4.3`。`main` 中保留的旧兼容层仅属于 v0.5.0 过渡状态；v0.5.1+ 将按 Lite-only 方向删除，不再继续维护。
+## Return Route
 
-## 安装
+Lite 已拥有独立 Return Route 系统，包括任务、当前状态、线路识别、ASN / Route Path、切线/恢复判断、事件历史和通知。
 
-推荐使用 Release 中唯一的安装包：
+v0.5.6 不再维护 Line Grid 自己的 `linegrid:return:*` tags、Return 页面或编辑器。三网回程以 Lite 原生能力为准。
 
-```text
-komari-line-grid-vX.Y.Z.zip
-```
+## IP 与隐私
 
-也可以本地构建：
+Line Grid 遵循 Lite 后端返回的权限结果：
 
-```bash
-./scripts/test.sh
-./scripts/package.sh
-```
-
-ZIP 根目录：
-
-```text
-Lite-theme.json
-komari-theme.json
-preview.svg
-dist/
-  index.html
-  css/
-  js/
-  metadata/
-```
-
-GitHub Actions 在 `v*` tag 上会自动创建/更新 Release，并只上传上述可安装 ZIP。GitHub 自动生成的 Source code zip/tar.gz 不属于 Release `assets[]`；不要再手工上传 `*-source.zip`，以免 Lite 远程主题导入误选第一个附件。
+- 登录状态下显示 Lite 允许返回的完整 IPv4 / IPv6。
+- 未登录状态只显示 Lite 后端允许公开的脱敏地址。
+- 主题不会尝试绕过 Lite 权限恢复完整 IP。
+- GeoIP / ASN 默认关闭；仅完整、有效、可公开路由的 IP 才允许发送给所选第三方 GeoIP 服务。
+- 打码、私网、文档网段、保留或无效地址全部跳过第三方查询。
 
 ## 扩展元数据
 
-可编辑：
+扩展 metadata 只保存 Lite 原生模型没有、且主题展示确实需要的信息，例如：
 
 ```text
-dist/metadata/nodes.json
+provider_name
+provider_url
+region_city
+longitude
+latitude
 ```
 
-支持：
+以下信息优先直接读取 Lite，不建立第二份配置：
 
-- `provider_name` / `provider_url`
-- `region_country` / `region_name` / `region_city`
-- `longitude` / `latitude`
-- `cpu_threads`
-- `renewal_price_cny`
-- `return_routes`
+```text
+traffic_reset_day
+billing_timezone
+offline_server_position
+price / billing_cycle / currency
+return_routes
+```
 
-Lite 的流量重置和账期字段不通过 metadata 覆盖。
+## 发布包
 
-## GeoIP / ASN
+v0.5.6 的安装包保持最小化，仅包含：
 
-GeoIP / ASN 默认关闭。可选择：
+```text
+Lite-theme.json
+preview.svg
+dist/index.html
+```
 
-- `ip.sb`
-- `ipinfo.io`
-- `ipwho.is`
-- `ipapi.co`
-
-只有完整且可公开路由的 IP 才允许发送给第三方 GeoIP 服务；被 Lite 隐藏、打码、私网、文档网段、保留或无效的地址都会跳过外部查询。
+`dist/index.html` 为自包含发布页，构建阶段会内联 CSS、JavaScript、metadata 和本地图像资源。
 
 ## 开发与验证
 
@@ -204,27 +168,21 @@ node scripts/build-release.js --check
 ./scripts/test.sh
 ```
 
-测试会验证：
+v0.5.6 的自动验证覆盖：
 
-- JavaScript 语法
-- Komari/Lite adapter 基础语义
-- Lite clean-path → hash-router deep-link 桥接
-- `ping_task` 自动选择对应 Ping Task
-- 双 manifest 一致性与 Lite navigation 合约
-- manifest 不包含主题级流量重置设置
-- 发布包不包含自定义重置日编辑器
-- Lite API 数据路径不调用旧主题 `billingWindow`
-- Lite `traffic_reset_day` 的显示窗口、月底截断、关闭/null 语义
-- Lite 原生 `weight → created_at → uuid` 节点顺序
-- 默认 `offlineServerPosition=Keep`
-- Traffic DOM 兼容写入保持幂等，MutationObserver 不监听 `characterData`，防止自激重绘
-- Traffic 预测与重置倒计时不会被 Lite 兼容层隐藏
-- GeoIP 公网 IP 门禁
-- 自包含 HTML 可重复构建
-- ZIP 完整性
+- Lite RPC2 数据语义与原生节点顺序
+- navigation / deep-link / Ping Task
+- 当前账期流量、额度、重置显示和 Metric Store 历史
+- GeoIP 公网 IP 门禁与权限感知 IP 展示
+- Globe 重绘和自动旋转参数
+- 延迟多时间范围与多线路图表
+- Traffic 7 日布局、System 硬件信息和费用中心
+- 异常节点提示与移动端详情布局
+- 最终运行时死代码清理
+- 自包含 HTML 可重复构建与最小安装包完整性
 
 ## 上游与许可
 
 视觉、布局和交互设计移植自 `selkk-lab/mmwx-theme-line-grid`，上游使用 MIT License。本仓库保留上游版权与许可说明。
 
-Komari 与 Komari Lite 均为独立项目；本主题通过其公开 RPC2 / 主题机制运行，不包含服务端主程序代码。
+Lite 与原版 Komari 均为独立项目；Line Grid v0.5.1+ 仅以 Lite 的公开 RPC2 / 主题机制为目标运行环境。
