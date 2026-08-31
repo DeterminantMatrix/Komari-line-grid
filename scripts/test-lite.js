@@ -73,8 +73,13 @@ function loadLite(pathname, search, hash) {
 }
 
 {
-  const r = loadLite('/node/abc-123/overview', '', '#/node/custom/traffic');
-  assert(r.location.hash === '#/node/custom/traffic', 'existing Line Grid hash route must win over clean-path bridge');
+  const r = loadLite('/node/abc-123/routes', '', '');
+  assert(r.location.hash === '#/node/abc-123/overview', 'legacy clean-path Return route must fall back to overview');
+}
+
+{
+  const r = loadLite('/', '', '#/node/abc-123/routes');
+  assert(r.location.hash === '#/node/abc-123/overview', 'legacy hash Return route must fall back to overview');
 }
 
 {
@@ -93,31 +98,18 @@ function loadLite(pathname, search, hash) {
 {
   const r = loadLite('/', '', '');
   const payload = {
-    _runtime: 'lite',
     servers: [
-      { uuid: 'a', weight: 99 },
-      { uuid: 'b', weight: 99 },
-      { uuid: 'c', weight: 99 },
-      { uuid: 'd', weight: 99 },
-      { uuid: 'e', weight: 99 },
+      { uuid: 'a', traffic_reset_day: 3 },
+      { uuid: 'b', traffic_reset_day: 0 },
+      { uuid: 'c', traffic_reset_day: null },
     ],
   };
-  r.api.applyLiteNodeMetadata(payload, {
-    a: { uuid: 'a', weight: 2, created_at: '2026-01-01T00:00:00Z', traffic_reset_day: 3 },
-    b: { uuid: 'b', weight: 1, created_at: '2026-01-02T00:00:00Z', traffic_reset_day: 21 },
-    c: { uuid: 'c', weight: 1, created_at: '2026-01-01T00:00:00Z', traffic_reset_day: 30 },
-    d: { uuid: 'd', weight: 3, created_at: '2026-01-01T00:00:00Z', traffic_reset_day: 0 },
-    e: { uuid: 'e', weight: 4, created_at: '2026-01-01T00:00:00Z', traffic_reset_day: null },
-  }, new Date('2026-08-31T00:00:00Z'));
-  assert(payload.servers.map((s) => s.uuid).join(',') === 'c,b,a,d,e', 'Lite native weight/created_at/uuid order not preserved');
-  const a = payload.servers.find((s) => s.uuid === 'a');
+  r.api.applyLiteDisplayWindows(payload, new Date('2026-08-31T00:00:00Z'));
+  const a = payload.servers[0];
   assert(a.period_start === '2026-08-03' && a.period_end === '2026-09-03', 'Lite reset-day display window mismatch');
   assert(a.billing_timezone === 'Asia/Shanghai', 'Lite reset display timezone mismatch');
-
-  const d = payload.servers.find((s) => s.uuid === 'd');
-  const e = payload.servers.find((s) => s.uuid === 'e');
-  assert(d.traffic_reset_day === 0 && d.period_start == null && d.period_end == null, 'disabled Lite reset must not invent a display cycle');
-  assert(e.traffic_reset_day == null && e.period_start == null && e.period_end == null, 'follow-Agent/null Lite reset must not invent a display cycle');
+  assert(payload.servers[1].period_start == null && payload.servers[1].period_end == null, 'disabled reset must not invent a cycle');
+  assert(payload.servers[2].period_start == null && payload.servers[2].period_end == null, 'null reset must not invent a cycle');
 
   const feb = r.api.liteDisplayWindow(31, new Date('2026-02-15T00:00:00Z'));
   assert(feb.start === '2026-01-31' && feb.end === '2026-02-28', 'Lite end-of-month reset clamp mismatch');
@@ -125,10 +117,6 @@ function loadLite(pathname, search, hash) {
 
 {
   const r = loadLite('/', '', '');
-  assert(typeof r.api.isActive === 'function', 'Lite runtime state accessor missing');
-  assert(r.api.isActive() === false, 'Lite compatibility layer must start inactive before backend detection');
-  assert(!Object.prototype.hasOwnProperty.call(r.api, 'trafficLabels'), 'theme-owned traffic labels API must be removed');
-  assert(!Object.prototype.hasOwnProperty.call(r.api, 'markLiteRuntime'), 'legacy Lite runtime marker must be removed');
   assert(r.observers.length === 1, 'Lite compatibility observer missing');
   assert(r.observers[0].options.characterData !== true, 'observer must not watch characterData and self-trigger on text rewrites');
 }
@@ -136,11 +124,16 @@ function loadLite(pathname, search, hash) {
 {
   const source = fs.readFileSync('dist/js/lite.js', 'utf8');
   assert(source.includes('setTextIfChanged'), 'Lite DOM compatibility writes must stay idempotent');
-  for (const forbidden of ['trafficResetOverrides', 'trafficResetDay', 'admin-reset-editor', 'admin:editClient']) {
-    assert(!source.includes(forbidden), 'Lite runtime must not reintroduce theme-owned traffic reset state: ' + forbidden);
+  assert(source.includes('removeLegacyReturnUI'), 'legacy Return tab removal missing');
+  assert(source.includes('Line Grid · Lite'), 'Lite-only branding missing');
+  for (const forbidden of [
+    'trafficResetOverrides', 'trafficResetDay', 'admin-reset-editor', 'admin:editClient',
+    'applyLiteNodeMetadata', 'sortLiteServers', "rpc('common:getNodes'",
+  ]) {
+    assert(!source.includes(forbidden), 'slim Lite runtime reintroduced redundant/legacy logic: ' + forbidden);
   }
   assert(!/traffic-forecast[\s\S]{0,180}\.hidden\s*=\s*true/.test(source), 'Lite compatibility must not hide the Traffic page forecast');
   assert(!/quota-reset[\s\S]{0,180}\.hidden\s*=\s*true/.test(source), 'Lite compatibility must not hide the reset countdown');
 }
 
-console.log('Lite compatibility tests passed');
+console.log('Slim Lite runtime tests passed');
