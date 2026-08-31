@@ -1,17 +1,20 @@
 # Changelog
 
-## Unreleased — Lite native port
+## v0.5.6
 
-- Add `Lite-theme.json` while retaining `komari-theme.json` for dual compatibility.
-- Treat Lite `net_total_up/down` as authoritative calibrated current billing-cycle usage; Metric Store remains the historical-series source.
-- Add `dist/js/lite.js` to isolate Lite-specific traffic semantics, GeoIP privacy gating and navigation compatibility.
-- Replace the legacy parent-DOM traffic reset editor with Lite-native `admin:listClients` / `admin:editClient` and `traffic_reset_day`.
-- Add one-time migration from legacy `trafficResetDay` / `trafficResetOverrides` into Lite-native client settings.
-- Declare fragment-free Lite navigation paths and bridge them into the existing Line Grid hash router before `app.js` starts.
-- Honor Lite Dashboard `ping_task` deep links by opening the Ping page and selecting the matching task.
-- Use neutral Line Grid branding for Komari/Lite runtime compatibility.
-- Add automated Lite navigation, Ping Task and GeoIP guard tests.
-- Release automation now uploads only the installable `komari-line-grid-vX.Y.Z.zip` as a release asset.
+- Finalize the Lite-only architecture introduced after v0.4.3; remove `komari-theme.json`, legacy Komari adapter/runtime paths, production demo data, theme-owned traffic reset writes and Line Grid Return-route tags/editor.
+- Use Lite `effective_traffic_limit / effective_traffic_type` and calibrated `net_total_up/down` as authoritative current billing-cycle data; keep Metric Store as the historical-series source.
+- Preserve Lite native node ordering (`weight -> created_at -> uuid`) and fragment-free navigation, including `ping_task` deep links.
+- Add 1h / 6h / 24h / 7D latency ranges, merged Ping Task charts, bounded history caching and fixed time-axis behavior.
+- Improve Traffic views for unlimited plans, sparse history, reset countdowns, quota forecasting and seven-day chart density.
+- Expand System details with CPU, RAM/Swap, disk, IPv4/IPv6, ASN and compact mobile layouts.
+- Add node search, Last Seen and explainable anomaly hints for offline, high latency, packet loss, resource pressure, quota usage and expiry risk.
+- Refine the Finance / Cost Center with monthly total, annualized budget, remaining value, expiry-risk summary, native billing amount and sortable per-node detail.
+- Normalize information density across List / Grid / Column and refine mobile Overview / Latency / Traffic / System detail pages.
+- Harden GeoIP privacy gating so masked, private, reserved, documentation and invalid addresses are never sent to third-party GeoIP providers.
+- Remove proven-dead runtime helpers and constants from the final self-contained build.
+- Keep the installable package minimal: `Lite-theme.json`, `preview.svg`, and `dist/index.html` only.
+- Extend CI regression checks to validate Lite-only API surface, navigation, traffic semantics, finance/anomaly UI, mobile refinements, dead-code cleanup and minimal package integrity.
 
 ## v0.4.3
 
