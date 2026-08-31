@@ -16,6 +16,7 @@ const { refineAppVisual, refineChartsVisual, refineCssVisual } = require('./refi
 const { refineFinalApp, refineFinalCss } = require('./refine-v051-final');
 const { refineDeadCodeApp } = require('./refine-v051-deadcode');
 const { hardenEnrich, hardenApi, hardenLite, hardenApp } = require('./hardening-v056');
+const { hardenAppEdge } = require('./hardening-v056-edge');
 
 const root = path.resolve(__dirname, '..');
 const templatePath = path.join(root, 'src/index.html');
@@ -56,7 +57,7 @@ function build() {
         .replace(/Komari RPC2/g, 'Lite RPC2')
         .replace(/komari-rpc2/g, 'lite-rpc2')
         .replace(/Komari/g, 'Lite');
-      source = hardenApp(refineDeadCodeApp(refineFinalApp(refineAppVisual(refineApp(source)))));
+      source = hardenAppEdge(hardenApp(refineDeadCodeApp(refineFinalApp(refineAppVisual(refineApp(source))))));
     } else if (rel === 'dist/js/charts.js') {
       source = refineChartsVisual(refineCharts(fixChartsTimeAxis(fixCharts(source))));
     } else if (rel === 'dist/js/lite-adapter.js') {
