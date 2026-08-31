@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — Lite native port
+
+- Add `Lite-theme.json` while retaining `komari-theme.json` for dual compatibility.
+- Treat Lite `net_total_up/down` as authoritative calibrated current billing-cycle usage; Metric Store remains the historical-series source.
+- Add `dist/js/lite.js` to isolate Lite-specific traffic semantics, GeoIP privacy gating and navigation compatibility.
+- Replace the legacy parent-DOM traffic reset editor with Lite-native `admin:listClients` / `admin:editClient` and `traffic_reset_day`.
+- Add one-time migration from legacy `trafficResetDay` / `trafficResetOverrides` into Lite-native client settings.
+- Declare fragment-free Lite navigation paths and bridge them into the existing Line Grid hash router before `app.js` starts.
+- Honor Lite Dashboard `ping_task` deep links by opening the Ping page and selecting the matching task.
+- Use neutral Line Grid branding for Komari/Lite runtime compatibility.
+- Add automated Lite navigation, Ping Task and GeoIP guard tests.
+- Release automation now uploads only the installable `komari-line-grid-vX.Y.Z.zip` as a release asset.
+
 ## v0.4.3
 
 - Add a configurable billing time zone with `Asia/Shanghai` as the default.
