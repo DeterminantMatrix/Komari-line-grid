@@ -60,6 +60,7 @@ function featureApp(input) {
     '  }',
     '',
     '  function lookAtLocation(lon, lat) {',
+    '    if (lon == null || lat == null || lon === "" || lat === "") return false;',
     '    const x = Number(lon), y = Number(lat);',
     '    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;',
     '    globeLon = wrapLon(x);',
@@ -218,7 +219,7 @@ function featureApp(input) {
     '',
     '  function systemHistoryHTML(server) {',
     '    return \'<section class="system-history" data-system-history data-uuid="\' + attr(server && server.uuid || "") + \'"><header class="system-history-head"><div><div class="lbl">资源历史</div><small data-system-history-meta>按需读取 Lite 历史</small></div><div class="system-history-ranges">\' +',
-    '      [["1h","1H"],["24h","24H"],["7d","7D"]].map(function (row) { return \'<button type="button" class="\' + (systemHistoryRange === row[0] ? \'is-on\' : \'\') + \'" data-system-history-range="\' + row[0] + \'">\' + row[1] + \'</button>\'; }).join("") +',
+    '      [["1h","1H"],["24h","24H"],["7d","7D"]].map(function (row) { return \'<button type="button" class="\' + (systemHistoryRange === row[0] ? \' is-on\' : \'\') + \'" data-system-history-range="\' + row[0] + \'">\' + row[1] + \'</button>\'; }).join("") +',
     '      \'</div></header><div class="system-history-grid" data-system-history-body><div class="chart-empty">正在读取 Lite 历史…</div></div></section>\';',
     '  }'
   ].join('\n'));
