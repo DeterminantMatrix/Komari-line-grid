@@ -71,6 +71,13 @@ function fixApp(input) {
 
   source = replaceRequired(
     source,
+    '        \'<span class="quota-reset">\' + (trafficResetDays(server) == null ? "重置 —" : ("距重置 " + trafficResetDays(server) + " 天")) + "</span>" +\n',
+    '        \'<span class="quota-reset">\' + (!limit ? "无限流量" : (trafficResetDays(server) == null ? "重置 —" : ("距重置 " + trafficResetDays(server) + " 天"))) + "</span>" +\n',
+    'unlimited quota reset label'
+  );
+
+  source = replaceRequired(
+    source,
     '    const sourceLabel = s.traffic_source === \'metric_period\' ? \'Metric Store · 当前账期\' : s.traffic_source === \'record_period\' ? \'历史记录差分 · 当前账期\' : \'当前账期数据不可用\';\n',
     '    const resetDays = trafficResetDays(s);\n    const cycleLabel = s.period_start && s.period_end ? (\'账期 \' + s.period_start.slice(5) + \' → \' + s.period_end.slice(5)) : \'当前账期\';\n    const cycleHint = resetDays == null ? cycleLabel : (cycleLabel + \' · \' + resetDays + \' 天后重置\');\n    const historyLabel = ctx.last7.length ? (\'已有 \' + ctx.last7.length + \' 天历史\') : \'暂无历史流量\';\n',
     'traffic labels'
