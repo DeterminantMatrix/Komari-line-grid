@@ -33,11 +33,11 @@
           "zh-CN": "离线节点位置"
         },
         "help": {
-          "en": "First, Keep, or Last. Within each group nodes follow Lite weight order.",
-          "zh-CN": "First / Keep / Last；组内按 Lite weight 顺序。"
+          "en": "Keep follows Lite's native weight order exactly. First or Last can be selected explicitly if desired.",
+          "zh-CN": "Keep 严格跟随 Lite 后台原生 weight 顺序；如有需要可手动选择 First / Last。"
         },
         "options": "First,Keep,Last",
-        "default": "Last"
+        "default": "Keep"
       },
       {
         "key": "showGlobe",
