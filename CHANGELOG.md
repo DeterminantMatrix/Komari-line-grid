@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fix unknown currencies being treated as CNY and retain dynamic ISO currency rates.
+- Make GeoIP disable strict, tighten public-IP guards, and reject dotted IPv4-mapped IPv6 for external lookup.
+- Fix Ping-history failure state, multi-Ping-Task anomaly detection, missing-resource handling, finance null counting and footer freshness semantics.
+- Use compact high-frequency Lite status polling with periodic Ping refresh and cache parsed chart tooltip points.
+- Tighten GitHub Actions write permissions and add post-release regression coverage.
+
 ## v0.5.6
 
 - Finalize the Lite-only architecture introduced after v0.4.3; remove `komari-theme.json`, legacy Komari adapter/runtime paths, production demo data, theme-owned traffic reset writes and Line Grid Return-route tags/editor.
