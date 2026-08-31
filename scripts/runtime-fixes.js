@@ -79,13 +79,13 @@ function fixApp(input) {
   source = replaceRequired(
     source,
     '    const sourceLabel = s.traffic_source === \'metric_period\' ? \'Metric Store · 当前账期\' : s.traffic_source === \'record_period\' ? \'历史记录差分 · 当前账期\' : \'当前账期数据不可用\';\n',
-    '    const resetDays = trafficResetDays(s);\n    const cycleLabel = s.period_start && s.period_end ? (\'账期 \' + s.period_start.slice(5) + \' → \' + s.period_end.slice(5)) : \'当前账期\';\n    const cycleHint = resetDays == null ? cycleLabel : (cycleLabel + \' · \' + resetDays + \' 天后重置\');\n    const historyLabel = ctx.last7.length ? (\'已有 \' + ctx.last7.length + \' 天历史\') : \'暂无历史流量\';\n',
+    '    const resetDays = trafficResetDays(s);\n    const unlimitedTraffic = !Number(s.traffic_limit || 0);\n    const cycleLabel = unlimitedTraffic ? \'无限流量 · 不设重置\' : (s.period_start && s.period_end ? (\'账期 \' + s.period_start.slice(5) + \' → \' + s.period_end.slice(5)) : \'当前账期\');\n    const cycleHint = unlimitedTraffic ? cycleLabel : (resetDays == null ? cycleLabel : (cycleLabel + \' · \' + resetDays + \' 天后重置\'));\n    const historyLabel = ctx.last7.length ? (\'已有 \' + ctx.last7.length + \' 天历史\') : \'暂无历史流量\';\n',
     'traffic labels'
   );
   source = replaceRequired(
     source,
     "        '<div class=\"traffic-forecast' + (forecast && forecast.kind === 'bad' ? ' is-bad' : forecast && forecast.kind === 'good' ? ' is-good' : '') + '\"><span>流量预测</span><b>' + h(forecast ? forecast.text : '暂无额度或历史数据') + '</b><small>' + h(sourceLabel) + '</small></div>' +\n",
-    "        '<div class=\"traffic-forecast' + (forecast && forecast.kind === 'bad' ? ' is-bad' : forecast && forecast.kind === 'good' ? ' is-good' : '') + '\"><span>流量预测</span><b>' + h(forecast ? forecast.text : (s.traffic_limit ? '历史数据不足，暂不预测' : '无限额，无需额度预测')) + '</b><small>' + h(cycleHint) + '</small></div>' +\n",
+    "        '<div class=\"traffic-forecast' + (forecast && forecast.kind === 'bad' ? ' is-bad' : forecast && forecast.kind === 'good' ? ' is-good' : '') + '\"><span>流量预测</span><b>' + h(forecast ? forecast.text : (s.traffic_limit ? '历史数据不足，暂不预测' : '无限流量，无需额度预测')) + '</b><small>' + h(cycleHint) + '</small></div>' +\n",
     'traffic forecast copy'
   );
   source = replaceRequired(
@@ -93,6 +93,12 @@ function fixApp(input) {
     "          '<article><div class=\"lbl\">本账期上行</div><div class=\"val\">' + fmtBytes(s.traffic_used_up, 1) + '</div><div class=\"sub\">' + h(sourceLabel) + '</div></article>' +\n          '<article><div class=\"lbl\">本账期下行</div><div class=\"val\">' + fmtBytes(s.traffic_used_down, 1) + '</div><div class=\"sub\">' + h(sourceLabel) + '</div></article>' +\n",
     "          '<article><div class=\"lbl\">本账期上行</div><div class=\"val\">' + fmtBytes(s.traffic_used_up, 1) + '</div><div class=\"sub\">' + h(cycleLabel) + '</div></article>' +\n          '<article><div class=\"lbl\">本账期下行</div><div class=\"val\">' + fmtBytes(s.traffic_used_down, 1) + '</div><div class=\"sub\">' + h(cycleLabel) + '</div></article>' +\n",
     'traffic cycle subtitles'
+  );
+  source = replaceRequired(
+    source,
+    "          '<article><div class=\"lbl\">账期</div><div class=\"val\">' + h((s.period_start || '').slice(5) || '—') + '</div><div class=\"sub\">至 ' + h((s.period_end || '').slice(5) || '—') + \"</div></article>\" +\n",
+    "          '<article><div class=\"lbl\">账期</div><div class=\"val\">' + h(unlimitedTraffic ? '不重置' : ((s.period_start || '').slice(5) || '—')) + '</div><div class=\"sub\">' + h(unlimitedTraffic ? '无限流量' : ('至 ' + ((s.period_end || '').slice(5) || '—'))) + \"</div></article>\" +\n",
+    'unlimited traffic cycle card'
   );
   source = replaceRequired(
     source,
@@ -120,6 +126,7 @@ function fixApp(input) {
     'detail uptime wording'
   );
   source = removeFunction(source, 'maskIP');
+  source = source.replace(/无限额/g, '无限流量');
 
   return source;
 }
