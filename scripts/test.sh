@@ -77,10 +77,10 @@ if(!html.includes('RPC2')) throw new Error('RPC2 integration missing');
 if(/(?:src|href)="\.\/(?:js|css)\//.test(html)) throw new Error('release index must be self-contained');
 if(/data-inline-(?:src|href|metadata)=/.test(html)) throw new Error('release contains unresolved inline marker');
 if(!html.includes('data:image/png;base64,')) throw new Error('release grain image is not inlined');
-for(const required of ['class="node-ip"','idleMs: 64','dt * 0.0075','无限额，无需额度预测','已有 \' + ctx.last7.length + \' 天历史','slotCount','["IPv4", s.ipv4 || "—"]']) {
+for(const required of ['class="node-ip"','idleMs: 64','dt * 0.0075','无限流量，无需额度预测','无限流量 · 不设重置','已有 \' + ctx.last7.length + \' 天历史','slotCount','["IPv4", s.ipv4 || "—"]']) {
   if(!html.includes(required)) throw new Error('shipped runtime missing regression fix: '+required);
 }
-for(const forbidden of ['linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari','Powered by Komari Monitor','连接 Komari','Komari 数据读取失败','按 Komari 历史记录','ProbeDemo','demoMode','tickDemo','演示数据','data-inline-source="dist/js/data.js"','Lite 后端 · 当前账期','sec / U.DAY','function maskIP(']) {
+for(const forbidden of ['linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari','Powered by Komari Monitor','连接 Komari','Komari 数据读取失败','按 Komari 历史记录','ProbeDemo','demoMode','tickDemo','演示数据','data-inline-source="dist/js/data.js"','Lite 后端 · 当前账期','sec / U.DAY','function maskIP(','无限额']) {
   if(html.includes(forbidden)) throw new Error('shipped Lite runtime still contains legacy/demo/regression code: '+forbidden);
 }
 if(!html.includes('Line Grid · Lite')) throw new Error('Lite-only runtime attribution missing');
@@ -108,9 +108,9 @@ with ZipFile(name) as z:
     if f'content="{version}"' not in html: raise SystemExit('zip index version mismatch')
     if 'data-inline-src=' in html or 'data-inline-href=' in html or 'data-inline-metadata=' in html:
         raise SystemExit('zip index is not self-contained')
-    for required_text in ('class="node-ip"','idleMs: 64','dt * 0.0075','无限额，无需额度预测','slotCount'):
+    for required_text in ('class="node-ip"','idleMs: 64','dt * 0.0075','无限流量，无需额度预测','无限流量 · 不设重置','slotCount'):
         if required_text not in html: raise SystemExit('zip runtime missing screenshot regression fix: '+required_text)
-    for forbidden in ('linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari','ProbeDemo','demoMode','tickDemo','演示数据','data-inline-source="dist/js/data.js"','Lite 后端 · 当前账期','sec / U.DAY','function maskIP('):
+    for forbidden in ('linegrid:return:','line-grid-return-routes-v1','data-route-','saveReturnRoutes','三网回程','保存到 Komari','ProbeDemo','demoMode','tickDemo','演示数据','data-inline-source="dist/js/data.js"','Lite 后端 · 当前账期','sec / U.DAY','function maskIP(','无限额'):
         if forbidden in html: raise SystemExit('zip runtime contains legacy/demo/regression code: '+forbidden)
 print('Lite-only minimal zip complete')
 PY
