@@ -23,7 +23,7 @@ if(fs.existsSync('dist/js/data.js')) throw new Error('production demo dataset mu
 if(!fs.existsSync('dist/js/lite-adapter.js')) throw new Error('Lite adapter missing');
 const lite=JSON.parse(fs.readFileSync('Lite-theme.json','utf8'));
 if(lite.short!=='line-grid') throw new Error('theme short mismatch');
-if(lite.version!=='0.5.1') throw new Error('Lite-only development branch must be v0.5.1');
+if(lite.version!=='0.5.6') throw new Error('release version must be v0.5.6');
 if(!lite.navigation) throw new Error('Lite navigation missing');
 if(lite.navigation.server_detail!=='/node/{uuid}/overview') throw new Error('Lite detail navigation mismatch');
 if(lite.navigation.server_network!=='/network/node/{uuid}/ping') throw new Error('Lite network navigation mismatch');
