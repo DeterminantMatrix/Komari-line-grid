@@ -12,6 +12,7 @@ const { refineApp } = require('./refine-v051-app');
 const { refineAppVisual, refineCssVisual } = require('./refine-v051-visual');
 const { refineCss } = require('./refine-v051-runtime');
 const { refineFinalApp, refineFinalCss } = require('./refine-v051-final');
+const { refineDeadCodeApp } = require('./refine-v051-deadcode');
 
 function assert(cond, message) {
   if (!cond) throw new Error(message);
@@ -24,7 +25,7 @@ app = app
   .replace(/Komari RPC2/g, 'Lite RPC2')
   .replace(/komari-rpc2/g, 'lite-rpc2')
   .replace(/Komari/g, 'Lite');
-app = refineFinalApp(refineAppVisual(refineApp(app)));
+app = refineDeadCodeApp(refineFinalApp(refineAppVisual(refineApp(app))));
 
 for (const required of [
   'function anomalyDetails(server)',
@@ -46,8 +47,12 @@ for (const required of [
 for (const forbidden of [
   'function nfmt(',
   'function monthlyCostText(',
-  'function expiryShortText('
-]) assert(!app.includes(forbidden), 'orphan runtime helper survived: ' + forbidden);
+  'function expiryShortText(',
+  'function hexToRgba(',
+  'function parseColor(',
+  'const HOMES =',
+  'const CYCLE ='
+]) assert(!app.includes(forbidden), 'proven-dead runtime code survived: ' + forbidden);
 
 const css = refineFinalCss(refineCssVisual(refineCss(slimCss(fs.readFileSync('dist/css/app.css', 'utf8')))));
 for (const required of [
