@@ -47,19 +47,22 @@ for(const forbidden of ['trafficResetOverrides','trafficResetDay','billingWindow
 }
 
 const liteShim=fs.readFileSync('dist/js/lite.js','utf8');
-for(const token of ['navigationHashFromPath','normalizeNavigationPath','ping_task','data-latency-target','setTextIfChanged','applyLiteNodeMetadata','liteDisplayWindow']) {
-  if(!liteShim.includes(token)) throw new Error('Lite compatibility shim missing '+token);
+for(const token of ['navigationHashFromPath','normalizeNavigationPath','normalizeLegacyReturnHash','ping_task','data-latency-target','setTextIfChanged','applyLiteDisplayWindows','liteDisplayWindow','removeLegacyReturnUI','Line Grid · Lite']) {
+  if(!liteShim.includes(token)) throw new Error('Lite runtime bridge missing '+token);
 }
-for(const forbidden of ['trafficResetOverrides','trafficResetDay','admin-reset-editor']) {
-  if(liteShim.includes(forbidden)) throw new Error('Lite runtime reintroduced theme-owned traffic reset state: '+forbidden);
+for(const forbidden of ['trafficResetOverrides','trafficResetDay','admin-reset-editor','admin:editClient','applyLiteNodeMetadata','sortLiteServers',"rpc('common:getNodes'"]) {
+  if(liteShim.includes(forbidden)) throw new Error('Lite runtime contains redundant/legacy logic: '+forbidden);
 }
 if(/traffic-forecast[\s\S]{0,180}\.hidden\s*=\s*true/.test(liteShim)) throw new Error('Lite runtime must not hide Traffic forecast UI');
 if(/quota-reset[\s\S]{0,180}\.hidden\s*=\s*true/.test(liteShim)) throw new Error('Lite runtime must not hide reset countdown UI');
 
 const api=fs.readFileSync('dist/js/api.js','utf8');
 if(!api.includes('LiteAdapt.snapshot')) throw new Error('API does not use Lite adapter');
-for(const forbidden of ['KomariAdapt','applyLiteNativeSemantics','restoreLiteNativePeriod','mergeTrafficHistory']) {
-  if(api.includes(forbidden)) throw new Error('Lite API path contains legacy adapter logic: '+forbidden);
+for(const forbidden of ['KomariAdapt','applyLiteNativeSemantics','restoreLiteNativePeriod','mergeTrafficHistory','admin:getClient','admin:editClient','saveReturnRoutes','linegrid:return:']) {
+  if(api.includes(forbidden)) throw new Error('Lite API path contains legacy/admin write logic: '+forbidden);
+}
+for(const required of ['common:getNodes','common:getNodesLatestStatus','common:getPublicInfo','common:getRecords','public:queryMetrics','common:getMe']) {
+  if(!api.includes(required)) throw new Error('Lite API path missing '+required);
 }
 
 const source=fs.readFileSync('src/index.html','utf8');
