@@ -4,6 +4,7 @@
   let lastPayload = null;
   let pollHandle = null;
   let rpcSeq = 0;
+  const seriesInFlight = Object.create(null);
 
   function trimSlash(value) {
     return String(value || '').replace(/\/+$/, '');
@@ -112,12 +113,30 @@
   }
 
   function fetchSeries(uuid, range, target) {
-    const hours = range === '24h' ? 24 : range === '6h' ? 6 : 1;
-    const params = { type: 'ping', uuid: String(uuid || ''), hours: hours, task_id: -1, maxCount: 4000 };
-    if (target && target !== 'all' && /^\d+$/.test(String(target))) params.task_id = Number(target);
-    return rpc('common:getRecords', params, 12000).then(function (raw) {
-      return LiteAdapt.pingSeries(raw, uuid, target || 'all');
-    });
+    const normalizedRange = String(range || '1h');
+    const hours = normalizedRange === '7D' || normalizedRange === '7d' ? 168 : normalizedRange === '24h' ? 24 : normalizedRange === '6h' ? 6 : 1;
+    const normalizedTarget = target && target !== 'all' ? String(target) : 'all';
+    const key = String(uuid || '') + ':' + hours + ':' + normalizedTarget;
+    if (seriesInFlight[key]) return seriesInFlight[key];
+
+    const params = {
+      type: 'ping',
+      uuid: String(uuid || ''),
+      hours: hours,
+      task_id: -1,
+      maxCount: hours >= 168 ? 2400 : 4000,
+    };
+    if (normalizedTarget !== 'all' && /^\d+$/.test(normalizedTarget)) params.task_id = Number(normalizedTarget);
+
+    const request = rpc('common:getRecords', params, hours >= 168 ? 18000 : 12000)
+      .then(function (raw) {
+        return LiteAdapt.pingSeries(raw, uuid, normalizedTarget);
+      })
+      .finally(function () {
+        delete seriesInFlight[key];
+      });
+    seriesInFlight[key] = request;
+    return request;
   }
 
   function fetchAccess() {
