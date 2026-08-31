@@ -47,6 +47,124 @@
   // before app.js starts; this is navigation compatibility only.
   normalizeNavigationPath();
 
+  function keyed(raw) {
+    if (!raw) return {};
+    if (raw.data && typeof raw.data === 'object') raw = raw.data;
+    if (!Array.isArray(raw) && typeof raw === 'object') return raw;
+    const out = {};
+    (Array.isArray(raw) ? raw : []).forEach(function (row) {
+      const id = row && (row.uuid || row.client || row.id);
+      if (id) out[String(id)] = row;
+    });
+    return out;
+  }
+
+  function pad2(value) {
+    return String(value).padStart(2, '0');
+  }
+
+  function dateKey(year, month, day) {
+    return String(year).padStart(4, '0') + '-' + pad2(month) + '-' + pad2(day);
+  }
+
+  function daysInMonth(year, month) {
+    return new Date(Date.UTC(year, month, 0)).getUTCDate();
+  }
+
+  function monthShift(year, month, delta) {
+    const zero = year * 12 + (month - 1) + delta;
+    return { year: Math.floor(zero / 12), month: ((zero % 12) + 12) % 12 + 1 };
+  }
+
+  function shanghaiParts(nowValue) {
+    const d = nowValue instanceof Date ? nowValue : new Date(nowValue == null ? Date.now() : nowValue);
+    const shifted = new Date(d.getTime() + 8 * 3600000);
+    return {
+      year: shifted.getUTCFullYear(),
+      month: shifted.getUTCMonth() + 1,
+      day: shifted.getUTCDate(),
+    };
+  }
+
+  // Display-only mirror of Lite's Asia/Shanghai cycle boundary. The reset
+  // policy and counters still belong exclusively to Lite; Line Grid only uses
+  // this to render the next reset date/countdown from Lite traffic_reset_day.
+  function liteDisplayWindow(resetDay, nowValue) {
+    const day = Number(resetDay);
+    if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+    const now = shanghaiParts(nowValue);
+    let startYear = now.year;
+    let startMonth = now.month;
+    let startDay = Math.min(day, daysInMonth(startYear, startMonth));
+    const todayKey = dateKey(now.year, now.month, now.day);
+    let startKey = dateKey(startYear, startMonth, startDay);
+    if (todayKey < startKey) {
+      const previous = monthShift(startYear, startMonth, -1);
+      startYear = previous.year;
+      startMonth = previous.month;
+      startDay = Math.min(day, daysInMonth(startYear, startMonth));
+      startKey = dateKey(startYear, startMonth, startDay);
+    }
+    const next = monthShift(startYear, startMonth, 1);
+    const nextDay = Math.min(day, daysInMonth(next.year, next.month));
+    return {
+      start: startKey,
+      end: dateKey(next.year, next.month, nextDay),
+      resetDay: day,
+      timeZone: 'Asia/Shanghai',
+    };
+  }
+
+  function sortLiteServers(payload) {
+    if (!payload || !Array.isArray(payload.servers)) return payload;
+    payload.servers.sort(function (a, b) {
+      const aw = Number(a && a.weight);
+      const bw = Number(b && b.weight);
+      const aWeight = Number.isFinite(aw) ? aw : Number.MAX_SAFE_INTEGER;
+      const bWeight = Number.isFinite(bw) ? bw : Number.MAX_SAFE_INTEGER;
+      if (aWeight !== bWeight) return aWeight - bWeight;
+
+      const at = Date.parse(String(a && a._lite_created_at || ''));
+      const bt = Date.parse(String(b && b._lite_created_at || ''));
+      const aTime = Number.isFinite(at) ? at : Number.MAX_SAFE_INTEGER;
+      const bTime = Number.isFinite(bt) ? bt : Number.MAX_SAFE_INTEGER;
+      if (aTime !== bTime) return aTime - bTime;
+
+      return String(a && a.uuid || '').localeCompare(String(b && b.uuid || ''));
+    });
+    payload.servers.forEach(function (server, index) {
+      if (server) server._order = index;
+    });
+    return payload;
+  }
+
+  function applyLiteNodeMetadata(payload, nodesRaw, nowValue) {
+    if (!payload || payload._runtime !== 'lite' || !Array.isArray(payload.servers)) return payload;
+    const nodes = keyed(nodesRaw);
+    payload.servers.forEach(function (server) {
+      if (!server || !server.uuid) return;
+      const node = nodes[String(server.uuid)] || {};
+      const weight = Number(node.weight);
+      if (Number.isFinite(weight)) server.weight = weight;
+      server._lite_created_at = String(node.created_at || '');
+
+      const resetDay = Number(node.traffic_reset_day);
+      if (Number.isInteger(resetDay) && resetDay >= 1 && resetDay <= 31) {
+        const window = liteDisplayWindow(resetDay, nowValue);
+        server.traffic_reset_day = resetDay;
+        server.period_start = window ? window.start : null;
+        server.period_end = window ? window.end : null;
+        server.billing_timezone = 'Asia/Shanghai';
+      } else {
+        server.traffic_reset_day = node.traffic_reset_day == null ? null : Number(node.traffic_reset_day);
+        server.period_start = null;
+        server.period_end = null;
+        server.billing_timezone = 'Asia/Shanghai';
+      }
+    });
+    return sortLiteServers(payload);
+  }
+
   function validPublicIPv4(raw) {
     const m = String(raw || '').match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
     if (!m) return false;
@@ -96,6 +214,14 @@
     return false;
   }
 
+  function setTextIfChanged(node, value) {
+    if (!node) return false;
+    const next = String(value == null ? '' : value);
+    if (String(node.textContent || '') === next) return false;
+    node.textContent = next;
+    return true;
+  }
+
   function normalizeBranding() {
     const nodes = global.document.querySelectorAll('.foot-meta');
     nodes.forEach(function (node) {
@@ -109,25 +235,8 @@
   function normalizeLiteTrafficUI() {
     if (!liteActive) return;
 
-    // Reset-day configuration and countdown belong to Lite, not the theme.
-    global.document.querySelectorAll('.quota-reset').forEach(function (node) {
-      node.hidden = true;
-    });
-
-    // Theme-side forecasting depended on a browser-computed billing window.
-    // Hide it in Lite mode instead of recreating Lite's traffic policy.
-    global.document.querySelectorAll('.page-traffic .traffic-forecast').forEach(function (node) {
-      node.hidden = true;
-    });
-
-    global.document.querySelectorAll('.page-traffic .kpi article').forEach(function (article) {
-      const label = article.querySelector('.lbl');
-      if (!label || String(label.textContent || '').trim() !== '账期') return;
-      label.textContent = '账期管理';
-      const value = article.querySelector('.val');
-      const sub = article.querySelector('.sub');
-      if (value) value.textContent = 'Lite';
-      if (sub) sub.textContent = '后台统一管理';
+    global.document.querySelectorAll('.page-traffic .traffic-forecast small').forEach(function (node) {
+      setTextIfChanged(node, 'Lite 后端 · 当前账期');
     });
 
     global.document.querySelectorAll('.page-traffic .kpi article').forEach(function (article) {
@@ -135,17 +244,17 @@
       const sub = article.querySelector('.sub');
       if (!label || !sub) return;
       const text = String(label.textContent || '').trim();
-      if (text === '本账期上行' || text === '本账期下行') sub.textContent = 'Lite 后端 · 当前账期';
+      if (text === '本账期上行' || text === '本账期下行') setTextIfChanged(sub, 'Lite 后端 · 当前账期');
     });
 
     global.document.querySelectorAll('.page-traffic .chart-fill .panel-h .hero-sub').forEach(function (node) {
-      node.textContent = 'Lite Metric Store · 历史流量';
+      setTextIfChanged(node, 'Lite Metric Store · 历史流量');
     });
 
     // Overview's trailing percentage is packet loss, not quota usage.
     global.document.querySelectorAll('.traffic-sub').forEach(function (node) {
       const text = String(node.textContent || '').trim();
-      if (/^\d+(?:\.\d+)?%$/.test(text)) node.textContent = '丢包 ' + text;
+      if (/^\d+(?:\.\d+)?%$/.test(text)) setTextIfChanged(node, '丢包 ' + text);
     });
   }
 
@@ -165,8 +274,17 @@
   if (global.ProbeAPI && typeof global.ProbeAPI.fetchServers === 'function') {
     const originalFetchServers = global.ProbeAPI.fetchServers;
     global.ProbeAPI.fetchServers = function () {
-      return originalFetchServers.apply(this, arguments).then(function (payload) {
+      const args = arguments;
+      const nodesPromise = global.ProbeAPI.rpc && typeof global.ProbeAPI.rpc === 'function'
+        ? global.ProbeAPI.rpc('common:getNodes', {}, 8000).catch(function () { return null; })
+        : Promise.resolve(null);
+      return Promise.all([originalFetchServers.apply(this, args), nodesPromise]).then(function (parts) {
+        const payload = parts[0];
         liteActive = !!(payload && payload._runtime === 'lite');
+        if (liteActive) {
+          if (parts[1]) applyLiteNodeMetadata(payload, parts[1]);
+          else sortLiteServers(payload);
+        }
         scheduleUICompatibility();
         return payload;
       });
@@ -204,7 +322,6 @@
     new global.MutationObserver(scheduleUICompatibility).observe(global.document.documentElement, {
       childList: true,
       subtree: true,
-      characterData: true,
     });
   }
 
@@ -213,6 +330,9 @@
     navigationHashFromPath: navigationHashFromPath,
     normalizeNavigationPath: normalizeNavigationPath,
     applyPingTaskFromQuery: applyPingTaskFromQuery,
+    liteDisplayWindow: liteDisplayWindow,
+    applyLiteNodeMetadata: applyLiteNodeMetadata,
+    sortLiteServers: sortLiteServers,
     isActive: function () { return liteActive; },
   };
 })(window);
