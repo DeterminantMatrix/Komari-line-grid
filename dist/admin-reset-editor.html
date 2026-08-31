@@ -3,45 +3,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Line Grid · 节点流量重置日</title>
+<title>Line Grid · Lite 节点流量重置日</title>
 <style>
 :root{color-scheme:dark;font-family:Inter,"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif}
-*{box-sizing:border-box}
-html,body{margin:0;background:transparent;color:#f3f2f7}
-body{padding:0 1px 1px}
-.card{border:1px solid #30303f;border-radius:10px;background:#14141f;overflow:hidden}
-.head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:16px 17px 13px;border-bottom:1px solid #2b2b38}
-.title{font-size:16px;font-weight:700;line-height:1.35}.help{margin-top:5px;color:#aaa9b7;font-size:12px;line-height:1.55}
-.head-actions{display:flex;align-items:center;gap:9px;flex:none}.badge{flex:none;border:1px solid #373749;background:#191925;border-radius:999px;padding:5px 9px;color:#bbbaca;font-size:11px;white-space:nowrap}.save-btn{height:30px;border:1px solid #6259d8;border-radius:7px;background:#5047c9;color:#fff;padding:0 12px;font:600 12px/1 Inter,"Noto Sans SC",system-ui,sans-serif;cursor:pointer}.save-btn:hover{background:#5c53d9}.save-btn:disabled{opacity:.55;cursor:wait}
-.tools{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid #2b2b38;background:#12121b}
-.search{min-width:0;flex:1;height:34px;border:1px solid #38384a;border-radius:7px;background:#0f0f18;color:#f2f2f6;padding:0 11px;outline:none;font:inherit;font-size:13px}
-.search:focus,.day:focus{border-color:#6d65e8;box-shadow:0 0 0 1px #6d65e8}
-.summary{font-size:12px;color:#9695a4;white-space:nowrap}
-.table-head,.row{display:grid;grid-template-columns:minmax(0,1fr) 145px 130px;align-items:center}
-.table-head{height:34px;padding:0 17px;background:#171722;color:#8f8e9d;font-size:11px;letter-spacing:.02em;border-bottom:1px solid #2b2b38}
-.list{height:326px;overflow:auto;scrollbar-color:#565568 transparent;scrollbar-width:thin}
-.row{min-height:44px;padding:6px 17px;border-bottom:1px solid #282834;gap:16px}
-.row:last-child{border-bottom:0}.row:hover{background:#181824}
-.node{min-width:0}.name{font-size:13px;font-weight:650;color:#f0eff5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.meta{margin-top:2px;color:#777685;font:10px/1.25 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.current-wrap{display:flex;align-items:center;justify-content:flex-end;min-width:0}.current-day{font:600 12px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#e4e3eb;white-space:nowrap}.current-day .mode{margin-left:5px;color:#777685;font:10px/1.2 Inter,"Noto Sans SC",system-ui,sans-serif;font-weight:400}.input-wrap{display:flex;align-items:center;justify-content:flex-end;gap:7px}.day{width:78px;height:30px;border:1px solid #3a394b;border-radius:6px;background:#0e0e17;color:#fff;text-align:center;outline:none;font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.day::placeholder{color:#686776;font-weight:400}.suffix{width:18px;color:#8b8a98;font-size:12px}.day.bad{border-color:#9e4d50;color:#ef9b9d}.row.hidden{display:none}
-.foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-top:1px solid #2b2b38;background:#12121b;color:#8f8e9d;font-size:11px}
-.status.ok{color:#8fa676}.status.warn{color:#c4a56a}.status.bad{color:#c97572}
-.empty{padding:36px 18px;text-align:center;color:#8e8d9b;font-size:13px}
-@media(max-width:600px){.head{padding:13px}.table-head,.row{grid-template-columns:minmax(0,1fr) 112px 96px;padding-left:13px;padding-right:13px;gap:8px}.day{width:58px}.list{height:330px}}
+*{box-sizing:border-box}html,body{margin:0;background:#101018;color:#f3f2f7}body{padding:16px}
+.card{max-width:980px;margin:0 auto;border:1px solid #30303f;border-radius:12px;background:#14141f;overflow:hidden}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:17px;border-bottom:1px solid #2b2b38}.title{font-size:17px;font-weight:700}.help{margin-top:5px;color:#aaa9b7;font-size:12px;line-height:1.6}.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+button{height:32px;border:1px solid #454458;border-radius:7px;background:#1b1b27;color:#eee;padding:0 11px;cursor:pointer;font:600 12px/1 system-ui,sans-serif}button.primary{border-color:#6259d8;background:#5047c9;color:#fff}button:disabled{opacity:.5;cursor:wait}button[hidden]{display:none}
+.tools{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid #2b2b38;background:#12121b}.search{min-width:0;flex:1;height:34px;border:1px solid #38384a;border-radius:7px;background:#0f0f18;color:#f2f2f6;padding:0 11px;outline:none}.summary{font-size:12px;color:#9695a4;white-space:nowrap}
+.table-head,.row{display:grid;grid-template-columns:minmax(0,1fr) 170px 180px;align-items:center}.table-head{height:34px;padding:0 17px;background:#171722;color:#8f8e9d;font-size:11px;border-bottom:1px solid #2b2b38}.list{max-height:560px;overflow:auto}.row{min-height:48px;padding:7px 17px;border-bottom:1px solid #282834;gap:16px}.row:hover{background:#181824}.row.hidden{display:none}.node{min-width:0}.name{font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{margin-top:2px;color:#777685;font:10px/1.25 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.current{text-align:right;font-size:12px}.current small{display:block;margin-top:2px;color:#777685}.edit{text-align:right}.reset{width:150px;height:32px;border:1px solid #3a394b;border-radius:6px;background:#0e0e17;color:#fff;padding:0 8px}.changed{border-color:#6d65e8}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;border-top:1px solid #2b2b38;background:#12121b;color:#8f8e9d;font-size:11px}.status.ok{color:#8fa676}.status.warn{color:#c4a56a}.status.bad{color:#d37b78}.empty{padding:42px 18px;text-align:center;color:#8e8d9b;font-size:13px}.migration{padding:10px 14px;border-bottom:1px solid #2b2b38;background:#181720;color:#b9b6c7;font-size:12px;line-height:1.55}.migration[hidden]{display:none}
+@media(max-width:680px){body{padding:8px}.head{display:block}.actions{margin-top:12px;justify-content:flex-start}.table-head,.row{grid-template-columns:minmax(0,1fr) 96px 126px;padding-left:11px;padding-right:11px;gap:7px}.reset{width:116px}.current small{display:none}}
 </style>
 </head>
 <body>
 <section class="card">
   <div class="head">
-    <div><div class="title">节点独立流量重置日</div><div class="help">左侧节点由 Komari 自动载入；右侧留空＝继承默认重置日。只需填写每月 1～31 日。</div></div>
-    <div class="head-actions"><div class="badge" id="default-badge">默认：1 日</div><button type="button" class="save-btn" id="save-btn">保存节点账期</button></div>
+    <div>
+      <div class="title">Lite 原生流量重置日</div>
+      <div class="help">直接读写 Lite Client 的 <code>traffic_reset_day</code>。跟随 Agent = null，关闭 = 0，每月 1～31 日 = 对应日期。账期边界由 Lite 后端统一管理。</div>
+    </div>
+    <div class="actions">
+      <button type="button" id="reload-btn">重新读取</button>
+      <button type="button" id="migrate-btn" hidden>迁移旧 Line Grid 设置</button>
+      <button type="button" class="primary" id="save-btn">保存修改</button>
+    </div>
   </div>
-  <div class="tools"><input class="search" id="search" placeholder="搜索 VPS…" autocomplete="off"><span class="summary" id="summary">载入中…</span></div>
-  <div class="table-head"><span>VPS</span><span style="text-align:right">当前重置日</span><span style="text-align:right">修改</span></div>
-  <div class="list" id="list"><div class="empty">正在读取节点…</div></div>
-  <div class="foot"><span id="status" class="status">修改后点击“保存节点账期”</span><span>空白 = 继承默认</span></div>
+  <div class="migration" id="migration-box" hidden></div>
+  <div class="tools"><input class="search" id="search" placeholder="搜索 VPS / UUID / 地区…" autocomplete="off"><span class="summary" id="summary">载入中…</span></div>
+  <div class="table-head"><span>VPS</span><span style="text-align:right">数据库当前值</span><span style="text-align:right">修改为</span></div>
+  <div class="list" id="list"><div class="empty">正在读取 Lite 节点…</div></div>
+  <div class="foot"><span id="status" class="status">需要管理员登录。</span><span>Line Grid 不再保存第二套账期配置</span></div>
 </section>
 <script>
 (function(){
@@ -50,156 +42,111 @@ body{padding:0 1px 1px}
   const search=document.getElementById('search');
   const summary=document.getElementById('summary');
   const statusEl=document.getElementById('status');
-  const badge=document.getElementById('default-badge');
   const saveBtn=document.getElementById('save-btn');
+  const reloadBtn=document.getElementById('reload-btn');
+  const migrateBtn=document.getElementById('migrate-btn');
+  const migrationBox=document.getElementById('migration-box');
   let nodes=[];
-  let unknown=[];
+  let legacySettings={};
   const values=new Map();
   const savedValues=new Map();
-  let savedSettings={};
 
-  function parentField(id, selector){
-    try{return parent.document.querySelector('#'+id+' '+selector);}catch(e){return null;}
-  }
-  function defaultDay(){
-    const el=parentField('trafficResetDay','input');
-    const raw=el&&el.value!==''?el.value:(savedSettings&&savedSettings.trafficResetDay!=null?savedSettings.trafficResetDay:1);
-    const n=Number(raw);
-    return Number.isInteger(n)&&n>=1&&n<=31?n:1;
-  }
-  function rawOverrides(){
-    if(savedSettings&&savedSettings.trafficResetOverrides!=null)return String(savedSettings.trafficResetOverrides||'');
-    const el=parentField('trafficResetOverrides','textarea,input');
-    return el?String(el.value||''):'';
-  }
-  function setNativeValue(el,value){
-    if(!el)return false;
-    const proto=el.tagName==='TEXTAREA'?parent.HTMLTextAreaElement.prototype:parent.HTMLInputElement.prototype;
-    const setter=Object.getOwnPropertyDescriptor(proto,'value')&&Object.getOwnPropertyDescriptor(proto,'value').set;
-    if(setter)setter.call(el,value);else el.value=value;
-    el.dispatchEvent(new parent.Event('input',{bubbles:true}));
-    el.dispatchEvent(new parent.Event('change',{bubbles:true}));
-    return true;
-  }
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function normalize(s){return String(s||'').trim().replace(/\s+/g,' ').toLowerCase();}
   function compact(s){return normalize(s).replace(/[\s._-]+/g,'');}
-  function parseExisting(){
-    values.clear();unknown=[];
-    const byId=new Map(nodes.map(n=>[String(n.uuid),n]));
-    const byName=new Map(),byCompact=new Map();
-    nodes.forEach(n=>{const k=normalize(n.name),c=compact(n.name);if(!byName.has(k))byName.set(k,[]);byName.get(k).push(n);if(!byCompact.has(c))byCompact.set(c,[]);byCompact.get(c).push(n);});
-    rawOverrides().split(/\r?\n/).forEach(line=>{
-      const src=line.trim();if(!src||src.startsWith('#'))return;
-      const m=src.match(/^(.+?)\s*=\s*(\d{1,2})\s*$/);if(!m){unknown.push(src);return;}
-      const day=Number(m[2]);if(day<1||day>31){unknown.push(src);return;}
-      const key=m[1].trim();let node=byId.get(key);
-      if(!node){let arr=byName.get(normalize(key));if(arr&&arr.length===1)node=arr[0];if(!node){arr=byCompact.get(compact(key));if(arr&&arr.length===1)node=arr[0];}}
-      if(node)values.set(String(node.uuid),day);else unknown.push(src);
-    });
-    savedValues.clear();
-    values.forEach((v,k)=>savedValues.set(k,v));
-  }
-  function serialize(){
-    const lines=[];
-    nodes.forEach(n=>{const d=values.get(String(n.uuid));if(d!=null)lines.push(String(n.uuid)+' = '+d);});
-    unknown.forEach(line=>lines.push(line));
-    return lines.join('\n');
-  }
-  function markDirty(){
-    statusEl.textContent='有未保存修改';
-    statusEl.className='status warn';
-  }
-  async function saveSettings(){
-    if(list.querySelector('.day.bad')){
-      statusEl.textContent='存在无效日期，请先修正';
-      statusEl.className='status bad';
-      return;
-    }
-    saveBtn.disabled=true;
-    statusEl.textContent='正在保存…';
-    statusEl.className='status warn';
-    try{
-      const infoResp=await fetch('/api/public',{cache:'no-store'});
-      if(!infoResp.ok)throw new Error('读取当前主题设置失败：HTTP '+infoResp.status);
-      const infoBody=await infoResp.json();
-      const info=infoBody&&infoBody.data?infoBody.data:infoBody;
-      const current=(info&&info.theme_settings&&typeof info.theme_settings==='object'&&!Array.isArray(info.theme_settings))?Object.assign({},info.theme_settings):{};
-      current.trafficResetOverrides=serialize();
-      current.trafficResetDay=defaultDay();
-      const resp=await fetch('/api/admin/theme/settings?theme=line-grid',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(current)
-      });
-      if(!resp.ok){
-        let msg='HTTP '+resp.status;
-        try{const body=await resp.json();msg=(body&&body.message)||msg;}catch(e){}
-        throw new Error(msg);
-      }
-      savedSettings=Object.assign({},current);
-      savedValues.clear();
-      values.forEach((v,k)=>savedValues.set(k,v));
-      const el=parentField('trafficResetOverrides','textarea,input');
-      if(el)setNativeValue(el,current.trafficResetOverrides);
-      statusEl.textContent='已保存，正在刷新页面…';
-      statusEl.className='status ok';
-      setTimeout(()=>{try{parent.location.reload();}catch(e){location.reload();}},450);
-    }catch(err){
-      statusEl.textContent='保存失败：'+(err&&err.message||err);
-      statusEl.className='status bad';
-      saveBtn.disabled=false;
-    }
-  }
-  function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-  function render(){
-    const q=normalize(search.value);let shown=0;
-    const dflt=defaultDay();badge.textContent='默认：'+dflt+' 日';
-    list.innerHTML=nodes.map(n=>{
-      const match=!q||normalize(n.name).includes(q)||normalize(n.uuid).includes(q)||normalize(n.region).includes(q);
-      if(match)shown++;
-      const key=String(n.uuid);
-      const v=values.get(key);
-      const saved=savedValues.get(key);
-      const effective=saved==null?dflt:saved;
-      const mode=saved==null?'继承':'独立';
-      return '<div class="row'+(match?'':' hidden')+'" data-uuid="'+esc(n.uuid)+'"><div class="node"><div class="name">'+esc(n.name||n.uuid)+'</div><div class="meta">'+esc((n.region?String(n.region)+' · ':'')+String(n.uuid).slice(0,8))+'</div></div><div class="current-wrap"><span class="current-day">'+effective+' 日<span class="mode">'+mode+'</span></span></div><div class="input-wrap"><input class="day" inputmode="numeric" pattern="[0-9]*" min="1" max="31" type="number" value="'+(v==null?'':v)+'" placeholder="继承 '+dflt+'"><span class="suffix">日</span></div></div>';
-    }).join('') || '<div class="empty">没有节点</div>';
-    summary.textContent=shown+'/'+nodes.length+' 台';
-  }
-  list.addEventListener('input',function(ev){
-    const input=ev.target.closest('.day');if(!input)return;
-    const row=input.closest('.row');const uuid=row&&row.getAttribute('data-uuid');if(!uuid)return;
-    const txt=input.value.trim();
-    if(txt===''){input.classList.remove('bad');values.delete(uuid);markDirty();return;}
-    const n=Number(txt);
-    if(!Number.isInteger(n)||n<1||n>31){input.classList.add('bad');statusEl.textContent='重置日只能填写 1～31';statusEl.className='status bad';return;}
-    input.classList.remove('bad');values.set(uuid,n);markDirty();
-  });
-  search.addEventListener('input',render);
-  saveBtn.addEventListener('click',saveSettings);
-  try{
-    const pInput=parentField('trafficResetDay','input');
-    if(pInput)pInput.addEventListener('input',function(){render();});
-  }catch(e){}
+  function sameValue(a,b){return (a==null?null:Number(a))===(b==null?null:Number(b));}
+  function resetLabel(v){if(v==null)return '跟随 Agent';if(Number(v)===0)return '关闭';return '每月 '+Number(v)+' 日';}
+  function optionHtml(value){let out='<option value="agent">跟随 Agent</option><option value="0">关闭</option>';for(let i=1;i<=31;i++)out+='<option value="'+i+'">每月 '+i+' 日</option>';return out;}
+  function parseSelectValue(raw){if(raw==='agent')return null;const n=Number(raw);return Number.isInteger(n)&&n>=0&&n<=31?n:null;}
 
-  Promise.all([
-    fetch('/api/public',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('读取主题设置失败：HTTP '+r.status);return r.json();}),
-    fetch('/api/rpc2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'common:getNodes',params:{}})}).then(r=>{if(!r.ok)throw new Error('节点读取失败：HTTP '+r.status);return r.json();})
-  ])
-    .then(([infoBody,body])=>{
-      const info=infoBody&&infoBody.data?infoBody.data:infoBody;
-      savedSettings=(info&&info.theme_settings&&typeof info.theme_settings==='object'&&!Array.isArray(info.theme_settings))?Object.assign({},info.theme_settings):{};
-      if(body&&body.error)throw new Error(body.error.message||'RPC2 节点读取失败');
-      let data=body&&body.result!=null?body.result:body;
-      if(data&&data.data!=null)data=data.data;
-      if(data&&Array.isArray(data.nodes))data=data.nodes;
-      if(data&&typeof data==='object'&&!Array.isArray(data))data=Object.values(data);
-      if(!Array.isArray(data))throw new Error('节点数据格式异常');
-      nodes=data.map((n,i)=>({uuid:String(n.uuid||n.UUID||n.id||''),name:String(n.name||n.uuid||'未命名节点'),region:String(n.region||''),weight:Number(n.weight||0),i})).filter(n=>n.uuid);
-      nodes.sort((a,b)=>a.weight-b.weight||a.i-b.i);
-      parseExisting();render();statusEl.textContent='当前值已从数据库读取；修改后点击“保存节点账期”';statusEl.className='status';
-    })
-    .catch(err=>{list.innerHTML='<div class="empty">读取失败：'+esc(err&&err.message||err)+'</div>';summary.textContent='读取失败';statusEl.textContent='请刷新页面后重试';statusEl.className='status bad';});
+  async function rpc(method,params){
+    const resp=await fetch('/api/rpc2',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({jsonrpc:'2.0',id:Date.now()+Math.random(),method:method,params:params||{}})});
+    if(!resp.ok)throw new Error('RPC HTTP '+resp.status);
+    const body=await resp.json();
+    if(body&&body.error)throw new Error(body.error.message||('RPC '+method+' failed'));
+    return body&&Object.prototype.hasOwnProperty.call(body,'result')?body.result:body;
+  }
+
+  async function readLegacy(){
+    try{
+      const resp=await fetch('/api/public',{cache:'no-store',credentials:'same-origin'});
+      if(!resp.ok)return {};
+      const body=await resp.json();
+      const info=body&&body.data?body.data:body;
+      return info&&info.theme_settings&&typeof info.theme_settings==='object'&&!Array.isArray(info.theme_settings)?info.theme_settings:{};
+    }catch(e){return {};}
+  }
+
+  function legacyPlan(){
+    const hasDefault=legacySettings&&legacySettings.trafficResetDay!=null;
+    const rawDefault=Number(legacySettings&&legacySettings.trafficResetDay);
+    const defaultDay=Number.isInteger(rawDefault)&&rawDefault>=1&&rawDefault<=31?rawDefault:null;
+    const raw=String(legacySettings&&legacySettings.trafficResetOverrides||'').trim();
+    if(!hasDefault&&!raw)return null;
+    const byId=new Map(nodes.map(function(n){return [n.uuid,n];}));
+    const byName=new Map(),byCompact=new Map();
+    nodes.forEach(function(n){const nk=normalize(n.name),ck=compact(n.name);if(!byName.has(nk))byName.set(nk,[]);byName.get(nk).push(n);if(!byCompact.has(ck))byCompact.set(ck,[]);byCompact.get(ck).push(n);});
+    const overrides=new Map();const unknown=[];
+    raw.split(/\r?\n/).forEach(function(line){const src=line.trim();if(!src||src.startsWith('#'))return;const m=src.match(/^(.+?)\s*=\s*(\d{1,2})\s*$/);if(!m){unknown.push(src);return;}const day=Number(m[2]);if(day<1||day>31){unknown.push(src);return;}const key=m[1].trim();let node=byId.get(key);if(!node){let arr=byName.get(normalize(key));if(arr&&arr.length===1)node=arr[0];if(!node){arr=byCompact.get(compact(key));if(arr&&arr.length===1)node=arr[0];}}if(node)overrides.set(node.uuid,day);else unknown.push(src);});
+    return {defaultDay:defaultDay,overrides:overrides,unknown:unknown};
+  }
+
+  function updateMigrationUI(){
+    const plan=legacyPlan();
+    if(!plan){migrateBtn.hidden=true;migrationBox.hidden=true;return;}
+    migrateBtn.hidden=false;migrationBox.hidden=false;
+    const defaultText=plan.defaultDay==null?'无有效默认值':('默认 '+plan.defaultDay+' 日');
+    migrationBox.textContent='检测到旧 Line Grid 账期配置：'+defaultText+'，'+plan.overrides.size+' 个节点独立值'+(plan.unknown.length?'，'+plan.unknown.length+' 行无法匹配':'')+'。迁移只会填入当前编辑表，点击“保存修改”后才写入 Lite。';
+  }
+
+  function applyLegacyPlan(){
+    const plan=legacyPlan();if(!plan)return;
+    nodes.forEach(function(n){if(plan.overrides.has(n.uuid))values.set(n.uuid,plan.overrides.get(n.uuid));else if(plan.defaultDay!=null)values.set(n.uuid,plan.defaultDay);});
+    render();
+    statusEl.textContent='旧配置已转换到编辑表，尚未写入 Lite；确认后点击“保存修改”。';statusEl.className='status warn';
+  }
+
+  function render(){
+    const q=normalize(search.value);let shown=0,changed=0;
+    list.innerHTML=nodes.map(function(n){
+      const match=!q||normalize(n.name).includes(q)||normalize(n.uuid).includes(q)||normalize(n.region).includes(q);if(match)shown++;
+      const current=savedValues.has(n.uuid)?savedValues.get(n.uuid):null;
+      const next=values.has(n.uuid)?values.get(n.uuid):current;
+      const dirty=!sameValue(current,next);if(dirty)changed++;
+      return '<div class="row'+(match?'':' hidden')+'" data-uuid="'+esc(n.uuid)+'"><div class="node"><div class="name">'+esc(n.name||n.uuid)+'</div><div class="meta">'+esc((n.region?n.region+' · ':'')+n.uuid)+'</div></div><div class="current">'+esc(resetLabel(current))+'<small>Lite DB</small></div><div class="edit"><select class="reset'+(dirty?' changed':'')+'" data-reset>'+optionHtml()+'</select></div></div>';
+    }).join('')||'<div class="empty">没有节点</div>';
+    list.querySelectorAll('[data-reset]').forEach(function(sel){const row=sel.closest('.row');const uuid=row.getAttribute('data-uuid');const current=savedValues.has(uuid)?savedValues.get(uuid):null;const next=values.has(uuid)?values.get(uuid):current;sel.value=next==null?'agent':String(next);});
+    summary.textContent=shown+'/'+nodes.length+' 台 · '+changed+' 项待保存';
+    saveBtn.disabled=changed===0;
+  }
+
+  async function load(){
+    saveBtn.disabled=true;reloadBtn.disabled=true;migrateBtn.disabled=true;statusEl.textContent='正在读取 Lite 管理数据…';statusEl.className='status warn';list.innerHTML='<div class="empty">正在读取 Lite 节点…</div>';
+    try{
+      const result=await Promise.all([rpc('admin:listClients',{}),readLegacy()]);
+      const data=Array.isArray(result[0])?result[0]:[];legacySettings=result[1]||{};
+      nodes=data.map(function(n,i){return {uuid:String(n.uuid||''),name:String(n.name||n.uuid||'未命名节点'),region:String(n.region_override||n.region||''),weight:Number(n.weight||0),reset:n.traffic_reset_day==null?null:Number(n.traffic_reset_day),i:i};}).filter(function(n){return !!n.uuid;}).sort(function(a,b){return a.weight-b.weight||a.i-b.i;});
+      values.clear();savedValues.clear();nodes.forEach(function(n){savedValues.set(n.uuid,n.reset);values.set(n.uuid,n.reset);});
+      render();updateMigrationUI();statusEl.textContent='已从 Lite 数据库读取 '+nodes.length+' 台节点。';statusEl.className='status ok';
+    }catch(err){
+      nodes=[];values.clear();savedValues.clear();render();statusEl.textContent='读取失败：'+(err&&err.message||err)+'。请确认当前会话已登录 Lite 管理员。';statusEl.className='status bad';
+    }finally{reloadBtn.disabled=false;migrateBtn.disabled=false;}
+  }
+
+  async function save(){
+    const changed=nodes.filter(function(n){return !sameValue(savedValues.get(n.uuid),values.get(n.uuid));});
+    if(!changed.length)return;
+    saveBtn.disabled=true;reloadBtn.disabled=true;migrateBtn.disabled=true;statusEl.textContent='正在写入 '+changed.length+' 台节点…';statusEl.className='status warn';
+    let done=0;
+    try{
+      for(const n of changed){await rpc('admin:editClient',{uuid:n.uuid,traffic_reset_day:values.get(n.uuid)});done++;statusEl.textContent='正在写入 '+done+'/'+changed.length+'…';}
+      statusEl.textContent='已保存 '+done+' 台节点，正在重新读取数据库…';statusEl.className='status ok';await load();
+    }catch(err){statusEl.textContent='保存中断（已完成 '+done+'/'+changed.length+'）：'+(err&&err.message||err);statusEl.className='status bad';reloadBtn.disabled=false;migrateBtn.disabled=false;render();}
+  }
+
+  list.addEventListener('change',function(ev){const sel=ev.target.closest('[data-reset]');if(!sel)return;const row=sel.closest('.row');const uuid=row&&row.getAttribute('data-uuid');if(!uuid)return;values.set(uuid,parseSelectValue(sel.value));render();statusEl.textContent='有未保存修改。';statusEl.className='status warn';});
+  search.addEventListener('input',render);saveBtn.addEventListener('click',save);reloadBtn.addEventListener('click',load);migrateBtn.addEventListener('click',applyLegacyPlan);
+  load();
 })();
 </script>
 </body>
