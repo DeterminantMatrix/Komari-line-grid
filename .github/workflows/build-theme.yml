@@ -3,6 +3,7 @@ name: Build theme
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -27,3 +28,35 @@ jobs:
           name: komari-line-grid-theme
           path: komari-line-grid-v*.zip
           if-no-files-found: error
+
+  github-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test-and-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build installable package
+        run: ./scripts/package.sh
+      - name: Validate tag matches manifest version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./Lite-theme.json').version")"
+          test "${GITHUB_REF_NAME}" = "v${VERSION}"
+      - name: Create release and upload installable ZIP only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./Lite-theme.json').version")"
+          ASSET="komari-line-grid-v${VERSION}.zip"
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --title "Line Grid ${GITHUB_REF_NAME}" --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" "$ASSET" --clobber
