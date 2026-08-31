@@ -8,6 +8,7 @@ const { slimDemo } = require('./slim-demo');
 const { slimCss } = require('./slim-css');
 const { fixApp, fixCharts, fixAdapter, fixLite } = require('./runtime-fixes');
 const { fixAppTimeAxis, fixChartsTimeAxis } = require('./time-axis-fix');
+const { refineAdapter, refineApp, refineCharts, refineApi, refineLite, refineCss } = require('./refine-v051');
 
 const root = path.resolve(__dirname, '..');
 const templatePath = path.join(root, 'src/index.html');
@@ -32,8 +33,8 @@ function build() {
   let html = fs.readFileSync(templatePath, 'utf8');
   html = html.replace(/<link rel="stylesheet" data-inline-href="([^"]+)"[^>]*>/g, function (_m, rel) {
     const file = path.join(root, rel);
-    const css = inlineImageUrls(slimCss(fs.readFileSync(file, 'utf8')), file);
-    return '<style data-inline-source="' + rel + '">\n' + css + '\n</style>';
+    const css = refineCss(slimCss(fs.readFileSync(file, 'utf8')));
+    return '<style data-inline-source="' + rel + '">\n' + inlineImageUrls(css, file) + '\n</style>';
   });
   html = html.replace(/<script data-inline-metadata="([^"]+)"><\/script>/g, function (_m, rel) {
     const data = JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8'));
@@ -48,12 +49,15 @@ function build() {
         .replace(/Komari RPC2/g, 'Lite RPC2')
         .replace(/komari-rpc2/g, 'lite-rpc2')
         .replace(/Komari/g, 'Lite');
+      source = refineApp(source);
     } else if (rel === 'dist/js/charts.js') {
-      source = fixChartsTimeAxis(fixCharts(source));
+      source = refineCharts(fixChartsTimeAxis(fixCharts(source)));
     } else if (rel === 'dist/js/lite-adapter.js') {
-      source = fixAdapter(source);
+      source = refineAdapter(fixAdapter(source));
+    } else if (rel === 'dist/js/api.js') {
+      source = refineApi(source);
     } else if (rel === 'dist/js/lite.js') {
-      source = fixLite(source);
+      source = refineLite(fixLite(source));
     }
     source = escScript(source);
     return '<script data-inline-source="' + rel + '">\n' + source + '\n<\/script>';
