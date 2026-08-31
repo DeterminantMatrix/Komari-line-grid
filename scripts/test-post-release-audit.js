@@ -73,6 +73,11 @@ function testFinalRuntime() {
     'row.monthly != null && Number.isFinite(Number(row.monthly))',
     ".filter(function (value) { return value != null && value !== ''; })",
     'const pings = server && server.online && Array.isArray(server.ping)',
+    'p && p.current_ms != null ? Number(p.current_ms) : null',
+    'p && p.loss_pct != null ? Number(p.loss_pct) : null',
+    'if (!p || p.current_ms == null) return null;',
+    "if (ms == null || ms === '') return '';",
+    "if (value == null || value === '') return '';",
     '状态时间',
     'setInterval(renderFoot, 10000);',
     'const chartPointCache = new WeakMap();',
@@ -85,6 +90,7 @@ function testFinalRuntime() {
     "return FX_DEFAULT[s] != null ? s : 'CNY';",
     'if (Number.isFinite(Number(row.monthly)))',
     'let pollHandle = null;',
+    'const v = p && Number(p.current_ms);',
   ];
   forbidden.forEach(function (token) {
     assert(!html.includes(token), 'final runtime still contains pre-audit behavior: ' + token);
