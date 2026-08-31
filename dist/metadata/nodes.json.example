@@ -1,41 +1,14 @@
 {
   "global": {
-    "title": "可选站点标题",
-    "show_globe": true,
-    "traffic_reset_day": 1,
-    "offline_server_position": "Last",
-    "location_note": "longitude/latitude 为精确定位最高优先级；没有时主题仅按城市提示或国家中心近似定位。",
-    "billing_timezone": "Asia/Shanghai"
+    "location_note": "仅保留 Lite 原生数据之外的可选展示增强；longitude/latitude 为地球精确定位最高优先级。"
   },
   "nodes": {
     "NODE-UUID": {
       "provider_name": "服务商",
       "provider_url": "https://example.com",
-      "region_country": "HK",
-      "region_name": "香港",
       "region_city": "Hong Kong",
       "longitude": 114.1694,
       "latitude": 22.3193,
-      "traffic_reset_day": 1,
-      "cpu_threads": 4,
-      "renewal_price_cny": 35,
-      "return_routes": [
-        {
-          "carrier": "telecom",
-          "region": "",
-          "route_type": "163"
-        },
-        {
-          "carrier": "unicom",
-          "region": "",
-          "route_type": "4837"
-        },
-        {
-          "carrier": "mobile",
-          "region": "",
-          "route_type": "CMI"
-        }
-      ],
       "asn": "",
       "asn_org": ""
     }
