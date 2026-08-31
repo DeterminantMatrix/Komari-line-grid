@@ -29,12 +29,15 @@ if(!geo || geo.default!=='ip.sb') throw new Error('GeoIP provider default missin
 const fallback=liteConfig.find(x=>x.key==='geoIpFallback');
 if(!fallback || fallback.default!==false) throw new Error('GeoIP fallback default must be false');
 const html=fs.readFileSync('dist/index.html','utf8');
-if(!html.includes('name="line-grid-version" content="0.4.3"')) throw new Error('release version marker missing');
+if(!html.includes(`name="line-grid-version" content="${lite.version}"`)) throw new Error('release version marker missing');
 if(!html.includes('Powered by Komari Monitor')) throw new Error('legacy attribution missing');
 if(!html.includes('RPC2')) throw new Error('RPC2 integration missing');
 if(/(?:src|href)="\.\/(?:js|css)\//.test(html)) throw new Error('release index must be self-contained');
 if(/data-inline-(?:src|href|metadata)=/.test(html)) throw new Error('release contains unresolved inline marker');
 if(!html.includes('data:image/png;base64,')) throw new Error('release grain image is not inlined');
+const editor=fs.readFileSync('dist/admin-reset-editor.html','utf8');
+for(const token of ['admin:listClients','admin:editClient','traffic_reset_day']) if(!editor.includes(token)) throw new Error('Lite reset editor missing '+token);
+for(const forbidden of ['parent.document','/api/admin/theme/settings?theme=line-grid']) if(editor.includes(forbidden)) throw new Error('Lite reset editor still depends on legacy admin DOM/settings: '+forbidden);
 console.log('json/ui invariants ok');
 NODE
 
@@ -44,7 +47,7 @@ import json
 from zipfile import ZipFile
 version=json.load(open('Lite-theme.json'))['version']
 name=f'komari-line-grid-v{version}.zip'
-required={'Lite-theme.json','komari-theme.json','preview.svg','dist/index.html','dist/css/app.css','dist/js/app.js','dist/js/komari.js','dist/js/enrich.js','dist/admin-reset-editor.html','dist/metadata/nodes.json'}
+required={'Lite-theme.json','komari-theme.json','preview.svg','dist/index.html','dist/css/app.css','dist/js/app.js','dist/js/komari.js','dist/js/enrich.js','dist/js/lite.js','dist/admin-reset-editor.html','dist/metadata/nodes.json'}
 with ZipFile(name) as z:
     names=set(z.namelist())
     missing=sorted(required-names)
@@ -54,6 +57,8 @@ with ZipFile(name) as z:
     if lite['short'] != legacy['short']: raise SystemExit('zip manifest short mismatch')
     html=z.read('dist/index.html').decode('utf-8')
     if f'content="{version}"' not in html: raise SystemExit('zip index version mismatch')
+    editor=z.read('dist/admin-reset-editor.html').decode('utf-8')
+    if 'admin:editClient' not in editor: raise SystemExit('zip reset editor is not Lite-native')
 print('zip complete')
 PY
 
