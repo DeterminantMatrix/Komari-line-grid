@@ -1,0 +1,130 @@
+name: Flatten v0.5.8 source retry
+
+on:
+  push:
+    branches: ['refactor/v0.5.8-source-flatten']
+
+permissions:
+  contents: write
+
+jobs:
+  flatten:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Flatten canonical source without workflow mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f scripts/features-lite-native.js ]; then
+            echo 'flatten already applied'
+            exit 0
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+          root=Path('.')
+          html=(root/'dist/index.html').read_text()
+          (root/'src').mkdir(exist_ok=True)
+          m=re.search(r'<style data-inline-source="dist/css/app.css">\n?(.*?)</style>',html,re.S)
+          if not m: raise SystemExit('style block not found')
+          css=m.group(1).rstrip()+'\n'
+          parts=[]
+          for x in re.finditer(r'<script data-inline-source="([^"]+)">\n?(.*?)</script>',html,re.S):
+              src=x.group(1)
+              if src in ('dist/metadata/nodes.json','dist/js/config.js'): continue
+              parts.append('/* '+src.rsplit('/',1)[-1]+' */\n'+x.group(2).rstrip())
+          js='\n\n'.join(parts)+'\n'
+          js=re.sub(r"\n  function trimSlash\(value\) \{.*?\n  function rpcUrl\(\) \{\n    return \(base\(\) \|\| ''\) \+ '/api/rpc2';\n  \}\n","\n  function rpcUrl() {\n    return '/api/rpc2';\n  }\n",js,flags=re.S)
+          js=re.sub(r"\n  function metadataFor\(metadata, uuid\) \{.*?\n  \}\n","\n",js,flags=re.S)
+          js=js.replace('function mapNode(node, live, metadata, order) {','function mapNode(node, live, order) {').replace('    const ext = metadataFor(metadata, uuid);\n','')
+          js=js.replace("      region_city: String(ext.region_city || ''),\n      provider_name: String(ext.provider_name || ''),\n      provider_url: String(ext.provider_url || ''),\n      longitude: numberOrNull(ext.longitude),\n      latitude: numberOrNull(ext.latitude),","      region_city: String(node.region_city || node.city || ''),\n      provider_name: String(node.provider_name || ''),\n      provider_url: String(node.provider_url || ''),\n      longitude: numberOrNull(node.longitude),\n      latitude: numberOrNull(node.latitude),")
+          js=js.replace("      asn: String(ext.asn || ''),\n      asn_org: String(ext.asn_org || ''),","      asn: String(node.asn || ''),\n      asn_org: String(node.asn_org || ''),")
+          js=js.replace('function snapshot(nodesRaw, latestRaw, publicRaw, metadata) {','function snapshot(nodesRaw, latestRaw, publicRaw) {').replace('      return mapNode(node, latest[String(node.uuid)] || null, metadata || {}, index);','      return mapNode(node, latest[String(node.uuid)] || null, index);')
+          js=re.sub(r"\n  function loadMetadata\(\) \{.*?\n  \}\n","\n",js,flags=re.S)
+          js=js.replace("      rpc('common:getPublicInfo', {}, 6000).catch(function () { return {}; }),\n      loadMetadata(),","      rpc('common:getPublicInfo', {}, 6000).catch(function () { return {}; }),").replace('      lastPayload = LiteAdapt.snapshot(parts[0], parts[1], parts[2], parts[3]);','      lastPayload = LiteAdapt.snapshot(parts[0], parts[1], parts[2]);')
+          js=js.replace('  const systemHistoryCache = Object.create(null);\n  const systemHistoryInFlight = Object.create(null);','  const systemHistoryCache = Object.create(null);\n  const systemHistoryInFlight = Object.create(null);\n  const SYSTEM_HISTORY_TTL_MS = 90000;')
+          js=js.replace('    const out = { range: value, hours: systemHistoryHours(value), cpu: [], ram: [], disk: [], count: rows.length };','    const out = { range: value, hours: systemHistoryHours(value), cpu: [], ram: [], disk: [], count: rows.length, fetchedAt: Date.now() };')
+          js=js.replace('      domainStart: Date.now() - data.hours * 3600000, domainEnd: Date.now(), windowHours: data.hours','      domainStart: (data.fetchedAt || Date.now()) - data.hours * 3600000, domainEnd: data.fetchedAt || Date.now(), windowHours: data.hours')
+          old='''    const key = systemHistoryKey(uuid, value);\n    if (systemHistoryCache[key]) { paintSystemHistory(uuid, value, systemHistoryCache[key]); return Promise.resolve(systemHistoryCache[key]); }\n    if (systemHistoryInFlight[key]) return systemHistoryInFlight[key];'''
+          new='''    const key = systemHistoryKey(uuid, value);\n    const cached = systemHistoryCache[key];\n    if (cached && Date.now() - cached.at < SYSTEM_HISTORY_TTL_MS) { paintSystemHistory(uuid, value, cached.data); return Promise.resolve(cached.data); }\n    if (cached) delete systemHistoryCache[key];\n    if (systemHistoryInFlight[key]) return systemHistoryInFlight[key];'''
+          if old not in js: raise SystemExit('history cache marker missing')
+          js=js.replace(old,new).replace('.then(function (raw) { const data = systemHistoryData(raw, uuid, value); systemHistoryCache[key] = data; paintSystemHistory(uuid, value, data); return data; })','.then(function (raw) { const data = systemHistoryData(raw, uuid, value); systemHistoryCache[key] = { data: data, at: Date.now() }; paintSystemHistory(uuid, value, data); return data; })')
+          old='''    }).join("");\n    return wire + links + pins +\n      '<text class="globe-caption" x="230" y="' + (cy + R + 28) + '" text-anchor="middle" font-size="8" font-family="IBM Plex Mono, monospace" letter-spacing="1.4">' + globeCaption() + " · " + cfg.key.toUpperCase() + "</text>";'''
+          new='''    }).join("");\n    let selectedMarker = "";\n    if (globePinned && regionFilter) {\n      const p = ortho(globeLon, globeLat);\n      if (p) selectedMarker = '<g class="globe-selected" aria-label="' + attr(regionFilter) + '"><circle class="globe-selected-ring" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="7"/><circle class="globe-selected-core" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="2.4"/></g>';\n    }\n    return wire + links + pins + selectedMarker +\n      '<text class="globe-caption" x="230" y="' + (cy + R + 28) + '" text-anchor="middle" font-size="8" font-family="IBM Plex Mono, monospace" letter-spacing="1.4">' + globeCaption() + " · " + cfg.key.toUpperCase() + "</text>";'''
+          if old not in js: raise SystemExit('globe marker anchor missing')
+          js=js.replace(old,new)
+          css+='\n.globe-selected-ring { fill:none; stroke:var(--ink); stroke-width:1.2; stroke-dasharray:2 2; vector-effect:non-scaling-stroke; }\n.globe-selected-core { fill:var(--ink); stroke:var(--void); stroke-width:1.4; vector-effect:non-scaling-stroke; }\n'
+          src=html
+          src=re.sub(r'<style data-inline-source="dist/css/app.css">\n?.*?</style>','<link rel="stylesheet" href="./style.css" data-inline-href="src/style.css">',src,flags=re.S)
+          src=re.sub(r'\n?\s*<script data-inline-source="(?:dist/metadata/nodes.json|dist/js/[^\"]+)">.*?</script>','',src,flags=re.S)
+          src=src.replace('</body>','  <script src="./app.js" data-inline-src="src/app.js"></script>\n</body>')
+          src=re.sub(r'<meta name="line-grid-version" content="[^"]+">','<meta name="line-grid-version" content="__LINE_GRID_VERSION__">',src)
+          src=re.sub(r'\n{3,}','\n\n',src)
+          (root/'src/index.html').write_text(src); (root/'src/style.css').write_text(css); (root/'src/app.js').write_text(js)
+          p=root/'Lite-theme.json'; o=json.loads(p.read_text()); o['version']='0.5.8'; p.write_text(json.dumps(o,ensure_ascii=False,indent=2)+'\n')
+          (root/'README.md').write_text('''# Line Grid\n\nLine Grid 是 [nuomiiiii/Lite](https://github.com/nuomiiiii/Lite) 的第三方主题。v0.5.1 起仅支持 Lite；Komari 兼容版冻结在 `release/v0.4.3`。\n\n## 功能\n\n- List / Grid / Column；Overview / Latency / Traffic / System。\n- 1H / 6H / 24H / 7D 延迟、多 Ping Task、流量、资源与费用概况。\n- CPU / RAM / Disk 历史读取 Lite；Globe 城市定位、异常提示与移动端适配。\n- Web / System 字体；GeoIP / ASN 可选增强。\n\n## 安装与数据\n\n从 Release 下载 `komari-line-grid-vX.Y.Z.zip` 在 Lite 导入。安装包仅含 `Lite-theme.json`、`preview.svg`、`dist/index.html`。\n\n节点、状态、账期和历史以 Lite RPC2 / Metric Store 为准，主题不提供后端接口。GeoIP 默认关闭；费用仅登录后显示。\n\n## 开发\n\n源码仅在 `src/`。`./scripts/test.sh` 测试，`./scripts/package.sh` 打包。\n\n## 上游与许可\n\n基于 [selkk-lab/mmwx-theme-line-grid](https://github.com/selkk-lab/mmwx-theme-line-grid) 移植与重构；运行环境为 [nuomiiiii/Lite](https://github.com/nuomiiiii/Lite)。本项目采用 [MIT License](./LICENSE)。\n''')
+          (root/'CHANGELOG.md').write_text('''# Changelog\n\n## v0.5.8\n\n- Flatten runtime into canonical `src/index.html`, `src/style.css`, and `src/app.js`; `dist/` contains only the generated page.\n- Remove the historical slim/runtime/refine/hardening patch chain after writing shipped behavior back into source.\n- Remove metadata/config compatibility and `?api=` override; monitor data uses same-origin Lite `/api/rpc2`.\n- Add 90-second lazy resource-history TTL and an explicit selected-city globe marker.\n- Simplify CI and the minimal three-file package.\n\n## v0.5.7\n\n- Harden currency, GeoIP privacy, history failure handling, resource/finance semantics, footer freshness, and chart performance.\n- Add compact status polling, lazy CPU/RAM/Disk history, Web/System fonts, and globe city pinning.\n\n## v0.5.6\n\n- Complete Lite-only migration; add truthful latency, traffic/resource/finance views, anomaly hints, hardware/mobile fixes, and minimal packaging.\n\n## v0.4.3\n\n- Add billing time-zone handling, reproducible builds, CI packaging, exchange-rate gating, and selectable GeoIP. Historical Komari line is frozen at `release/v0.4.3`.\n''')
+          PY
+          cat > scripts/build-release.js <<'EOF'
+          #!/usr/bin/env node
+          'use strict';
+          const fs=require('fs'), path=require('path');
+          const root=path.resolve(__dirname,'..');
+          const manifest=JSON.parse(fs.readFileSync(path.join(root,'Lite-theme.json'),'utf8'));
+          const src=path.join(root,'src/index.html'), out=path.join(root,'dist/index.html');
+          const check=process.argv.includes('--check');
+          function esc(s){return s.replace(/<\/script/gi,'<\\/script');}
+          function build(){let h=fs.readFileSync(src,'utf8').replace(/__LINE_GRID_VERSION__/g,String(manifest.version||'')); h=h.replace(/<link\s+rel="stylesheet"\s+href="[^"]*"\s+data-inline-href="([^"]+)"\s*>/g,(_m,p)=>'<style>\n'+fs.readFileSync(path.join(root,p),'utf8')+'\n</style>'); h=h.replace(/<script\s+src="[^"]*"\s+data-inline-src="([^"]+)"\s*><\/script>/g,(_m,p)=>'<script>\n'+esc(fs.readFileSync(path.join(root,p),'utf8'))+'\n</script>'); if(/data-inline-(?:src|href)=|__LINE_GRID_VERSION__/.test(h)) throw new Error('unresolved build marker'); return h;}
+          const h=build(); fs.mkdirSync(path.dirname(out),{recursive:true}); if(check){if(!fs.existsSync(out)||fs.readFileSync(out,'utf8')!==h){console.error('dist/index.html is stale');process.exit(1);} console.log('release index is reproducible');} else {fs.writeFileSync(out,h);console.log(out);}
+          EOF
+          cat > scripts/package.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+          node scripts/build-release.js >/dev/null
+          VERSION="$(node -p "require('./Lite-theme.json').version")"; OUT="komari-line-grid-v${VERSION}.zip"; rm -f "$OUT"
+          zip -q "$OUT" Lite-theme.json preview.svg dist/index.html; printf '%s\n' "$OUT"
+          EOF
+          cat > scripts/test.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+          node --check src/app.js; node --check scripts/build-release.js; node scripts/build-release.js >/dev/null; node scripts/build-release.js --check >/dev/null
+          node - <<'NODE'
+          const fs=require('fs'), m=JSON.parse(fs.readFileSync('Lite-theme.json','utf8')), s=fs.readFileSync('src/app.js','utf8'), c=fs.readFileSync('src/style.css','utf8'), h=fs.readFileSync('dist/index.html','utf8');
+          if(!/^\d+\.\d+\.\d+$/.test(m.version)||!h.includes(`name="line-grid-version" content="${m.version}"`)) throw new Error('version mismatch');
+          for(const p of ['dist/js','dist/css','dist/img','dist/metadata']) if(fs.existsSync(p)) throw new Error('legacy tree '+p);
+          for(const t of ['ProbeConfig','LINE_GRID_METADATA','loadMetadata(','metadataFor(','query.get(\'api\')','ProbeDemo']) if(s.includes(t)) throw new Error('legacy '+t);
+          if(!s.includes("function rpcUrl() {\n    return '/api/rpc2';")) throw new Error('RPC2 path');
+          const ap=[...s.matchAll(/[\"'](\/api\/[^\"']+)/g)].map(x=>x[1]); if(ap.some(x=>x!='/api/rpc2')) throw new Error('unexpected API');
+          for(const t of ['common:getNodes','common:getNodesLatestStatus','common:getPublicInfo','common:getRecords','public:queryMetrics','common:getMe','const SYSTEM_HISTORY_TTL_MS = 90000','Date.now() - cached.at < SYSTEM_HISTORY_TTL_MS','globe-selected-ring','globe-selected-core','if (globePinned) return;']) if(!(s+c).includes(t)) throw new Error('missing '+t);
+          if(/<link[^>]+fonts\.(?:googleapis|gstatic)\.com/i.test(h)||!s.includes('https://fonts.googleapis.com/css2?family=')||!c.includes('html[data-font-mode="system"]')) throw new Error('font mode');
+          const startup=s.slice(s.lastIndexOf('render();\n  ProbeAPI.fetchServers()')); if(!startup.includes('ProbeAPI.fetchServers()')||startup.includes('loadSystemHistory(')) throw new Error('history not lazy');
+          if(/data-inline-(?:src|href)=/.test(h)||/(?:src|href)="\.\/(?:app\.(?:js|css)|src\/)/.test(h)||!h.includes('data:image/png;base64,')) throw new Error('not self-contained');
+          console.log('flattened Lite-only runtime checks passed');
+          NODE
+          ./scripts/package.sh >/dev/null
+          python3 - <<'PY'
+          import json
+          from zipfile import ZipFile
+          v=json.load(open('Lite-theme.json'))['version']; n=f'komari-line-grid-v{v}.zip'; req={'Lite-theme.json','preview.svg','dist/index.html'}
+          with ZipFile(n) as z:
+              assert set(z.namelist())==req
+              assert f'content="{v}"' in z.read('dist/index.html').decode()
+          print('minimal release package ok')
+          PY
+          echo 'all checks passed'
+          EOF
+          chmod +x scripts/build-release.js scripts/package.sh scripts/test.sh
+          rm -rf dist/css dist/img dist/js dist/metadata
+          find scripts -maxdepth 1 -type f ! -name build-release.js ! -name package.sh ! -name test.sh -delete
+          node scripts/build-release.js >/dev/null
+          ./scripts/test.sh
+          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor: flatten v0.5.8 source architecture'
+          git push origin HEAD:"${GITHUB_REF_NAME}"
