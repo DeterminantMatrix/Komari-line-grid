@@ -36,7 +36,7 @@ function loadLite(pathname, search, hash) {
   };
   function MutationObserver(cb) {
     this.cb = cb;
-    this.observe = function () { observers.push(this); };
+    this.observe = function (target, options) { observers.push({ observer: this, target, options }); };
   }
   const window = {
     location,
@@ -48,7 +48,7 @@ function loadLite(pathname, search, hash) {
     addEventListener() {},
   };
   window.window = window;
-  const context = vm.createContext({ window, URLSearchParams, Promise });
+  const context = vm.createContext({ window, URLSearchParams, Promise, Date });
   vm.runInContext(fs.readFileSync('dist/js/lite.js', 'utf8'), context, { filename: 'dist/js/lite.js' });
   return { api: window.LineGridLite, location, clicks, observers };
 }
@@ -92,10 +92,36 @@ function loadLite(pathname, search, hash) {
 
 {
   const r = loadLite('/', '', '');
+  const payload = {
+    _runtime: 'lite',
+    servers: [
+      { uuid: 'a', weight: 99 },
+      { uuid: 'b', weight: 99 },
+      { uuid: 'c', weight: 99 },
+    ],
+  };
+  r.api.applyLiteNodeMetadata(payload, {
+    a: { uuid: 'a', weight: 2, created_at: '2026-01-01T00:00:00Z', traffic_reset_day: 3 },
+    b: { uuid: 'b', weight: 1, created_at: '2026-01-02T00:00:00Z', traffic_reset_day: 21 },
+    c: { uuid: 'c', weight: 1, created_at: '2026-01-01T00:00:00Z', traffic_reset_day: 30 },
+  }, new Date('2026-08-31T00:00:00Z'));
+  assert(payload.servers.map((s) => s.uuid).join(',') === 'c,b,a', 'Lite native weight/created_at/uuid order not preserved');
+  const a = payload.servers.find((s) => s.uuid === 'a');
+  assert(a.period_start === '2026-08-03' && a.period_end === '2026-09-03', 'Lite reset-day display window mismatch');
+  assert(a.billing_timezone === 'Asia/Shanghai', 'Lite reset display timezone mismatch');
+
+  const feb = r.api.liteDisplayWindow(31, new Date('2026-02-15T00:00:00Z'));
+  assert(feb.start === '2026-01-31' && feb.end === '2026-02-28', 'Lite end-of-month reset clamp mismatch');
+}
+
+{
+  const r = loadLite('/', '', '');
   assert(typeof r.api.isActive === 'function', 'Lite runtime state accessor missing');
   assert(r.api.isActive() === false, 'Lite compatibility layer must start inactive before backend detection');
   assert(!Object.prototype.hasOwnProperty.call(r.api, 'trafficLabels'), 'theme-owned traffic labels API must be removed');
   assert(!Object.prototype.hasOwnProperty.call(r.api, 'markLiteRuntime'), 'legacy Lite runtime marker must be removed');
+  assert(r.observers.length === 1, 'Lite compatibility observer missing');
+  assert(r.observers[0].options.characterData !== true, 'observer must not watch characterData and self-trigger on text rewrites');
 }
 
 console.log('Lite compatibility tests passed');
