@@ -98,17 +98,26 @@ function loadLite(pathname, search, hash) {
       { uuid: 'a', weight: 99 },
       { uuid: 'b', weight: 99 },
       { uuid: 'c', weight: 99 },
+      { uuid: 'd', weight: 99 },
+      { uuid: 'e', weight: 99 },
     ],
   };
   r.api.applyLiteNodeMetadata(payload, {
     a: { uuid: 'a', weight: 2, created_at: '2026-01-01T00:00:00Z', traffic_reset_day: 3 },
     b: { uuid: 'b', weight: 1, created_at: '2026-01-02T00:00:00Z', traffic_reset_day: 21 },
     c: { uuid: 'c', weight: 1, created_at: '2026-01-01T00:00:00Z', traffic_reset_day: 30 },
+    d: { uuid: 'd', weight: 3, created_at: '2026-01-01T00:00:00Z', traffic_reset_day: 0 },
+    e: { uuid: 'e', weight: 4, created_at: '2026-01-01T00:00:00Z', traffic_reset_day: null },
   }, new Date('2026-08-31T00:00:00Z'));
-  assert(payload.servers.map((s) => s.uuid).join(',') === 'c,b,a', 'Lite native weight/created_at/uuid order not preserved');
+  assert(payload.servers.map((s) => s.uuid).join(',') === 'c,b,a,d,e', 'Lite native weight/created_at/uuid order not preserved');
   const a = payload.servers.find((s) => s.uuid === 'a');
   assert(a.period_start === '2026-08-03' && a.period_end === '2026-09-03', 'Lite reset-day display window mismatch');
   assert(a.billing_timezone === 'Asia/Shanghai', 'Lite reset display timezone mismatch');
+
+  const d = payload.servers.find((s) => s.uuid === 'd');
+  const e = payload.servers.find((s) => s.uuid === 'e');
+  assert(d.traffic_reset_day === 0 && d.period_start == null && d.period_end == null, 'disabled Lite reset must not invent a display cycle');
+  assert(e.traffic_reset_day == null && e.period_start == null && e.period_end == null, 'follow-Agent/null Lite reset must not invent a display cycle');
 
   const feb = r.api.liteDisplayWindow(31, new Date('2026-02-15T00:00:00Z'));
   assert(feb.start === '2026-01-31' && feb.end === '2026-02-28', 'Lite end-of-month reset clamp mismatch');
@@ -122,6 +131,16 @@ function loadLite(pathname, search, hash) {
   assert(!Object.prototype.hasOwnProperty.call(r.api, 'markLiteRuntime'), 'legacy Lite runtime marker must be removed');
   assert(r.observers.length === 1, 'Lite compatibility observer missing');
   assert(r.observers[0].options.characterData !== true, 'observer must not watch characterData and self-trigger on text rewrites');
+}
+
+{
+  const source = fs.readFileSync('dist/js/lite.js', 'utf8');
+  assert(source.includes('setTextIfChanged'), 'Lite DOM compatibility writes must stay idempotent');
+  for (const forbidden of ['trafficResetOverrides', 'trafficResetDay', 'admin-reset-editor', 'admin:editClient']) {
+    assert(!source.includes(forbidden), 'Lite runtime must not reintroduce theme-owned traffic reset state: ' + forbidden);
+  }
+  assert(!/traffic-forecast[\s\S]{0,180}\.hidden\s*=\s*true/.test(source), 'Lite compatibility must not hide the Traffic page forecast');
+  assert(!/quota-reset[\s\S]{0,180}\.hidden\s*=\s*true/.test(source), 'Lite compatibility must not hide the reset countdown');
 }
 
 console.log('Lite compatibility tests passed');
