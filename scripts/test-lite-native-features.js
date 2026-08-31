@@ -53,6 +53,7 @@ assert(!startup.includes('loadSystemHistory('), 'homepage/startup must not load 
 [
   'let globePinned = false;',
   'function lookAtLocation(lon, lat)',
+  'if (lon == null || lat == null || lon === "" || lat === "") return false;',
   'data-aim-lon=',
   'data-aim-lat=',
   'if (globePinned) return;',
