@@ -124,11 +124,11 @@ function loadLite(pathname, search, hash) {
 {
   const source = fs.readFileSync('dist/js/lite.js', 'utf8');
   assert(source.includes('setTextIfChanged'), 'Lite DOM compatibility writes must stay idempotent');
-  assert(source.includes('removeLegacyReturnUI'), 'legacy Return tab removal missing');
-  assert(source.includes('Line Grid · Lite'), 'Lite-only branding missing');
+  assert(source.includes('normalizeLegacyReturnHash'), 'legacy Return URL fallback missing');
   for (const forbidden of [
     'trafficResetOverrides', 'trafficResetDay', 'admin-reset-editor', 'admin:editClient',
-    'applyLiteNodeMetadata', 'sortLiteServers', "rpc('common:getNodes'",
+    'applyLiteNodeMetadata', 'sortLiteServers', "rpc('common:getNodes'", 'removeLegacyReturnUI',
+    'normalizeBranding', 'Komari', 'Powered by',
   ]) {
     assert(!source.includes(forbidden), 'slim Lite runtime reintroduced redundant/legacy logic: ' + forbidden);
   }
