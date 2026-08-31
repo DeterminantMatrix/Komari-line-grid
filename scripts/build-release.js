@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { slimApp } = require('./slim-app');
 
 const root = path.resolve(__dirname, '..');
 const templatePath = path.join(root, 'src/index.html');
@@ -35,7 +36,9 @@ function build() {
     return '<script data-inline-source="' + rel + '">window.LINE_GRID_METADATA=' + JSON.stringify(data).replace(/<\//g, '<\\/') + ';<\/script>';
   });
   html = html.replace(/<script data-inline-src="([^"]+)"><\/script>/g, function (_m, rel) {
-    const source = escScript(fs.readFileSync(path.join(root, rel), 'utf8'));
+    let source = fs.readFileSync(path.join(root, rel), 'utf8');
+    if (rel === 'dist/js/app.js') source = slimApp(source);
+    source = escScript(source);
     return '<script data-inline-source="' + rel + '">\n' + source + '\n<\/script>';
   });
   if (/data-inline-(?:src|href|metadata)=/.test(html)) throw new Error('unresolved inline marker');
