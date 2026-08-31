@@ -5,20 +5,20 @@ const fs = require('fs');
 const { slimApp } = require('./slim-app');
 const { slimDemo } = require('./slim-demo');
 const { slimCss } = require('./slim-css');
-const { fixApp, fixAdapter } = require('./runtime-fixes');
+const { fixApp } = require('./runtime-fixes');
 const { fixAppTimeAxis } = require('./time-axis-fix');
 const { refineLatency } = require('./refine-v051-latency');
 const { refineApp } = require('./refine-v051-app');
-const { refineAppVisual } = require('./refine-v051-visual');
+const { refineAppVisual, refineCssVisual } = require('./refine-v051-visual');
 const { refineCss } = require('./refine-v051-runtime');
-const { refineCssVisual } = require('./refine-v051-visual');
 const { refineFinalApp, refineFinalCss } = require('./refine-v051-final');
 
 function assert(cond, message) {
   if (!cond) throw new Error(message);
 }
 
-let app = refineLatency(fixAppTimeAxis(fixApp(slimDemo(slimApp(fs.readFileSync('dist/js/app.js', 'utf8')))))
+let app = refineLatency(fixAppTimeAxis(fixApp(slimDemo(slimApp(fs.readFileSync('dist/js/app.js', 'utf8'))))));
+app = app
   .replace(/Powered by Komari Monitor/g, 'Line Grid · Lite')
   .replace(/Line Grid · Komari \/ Lite/g, 'Line Grid · Lite')
   .replace(/Komari RPC2/g, 'Lite RPC2')
