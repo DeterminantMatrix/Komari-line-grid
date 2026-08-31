@@ -25,9 +25,7 @@ assert(!/<link[^>]+href=["'][^"']*fonts\.(?:googleapis|gstatic)\.com/i.test(html
   'data-font-mode',
   'data-line-grid-font',
   'html[data-font-mode="system"]',
-  'System 仅使用本机系统字体',
 ].forEach(function (token) {
-  if (token === 'System 仅使用本机系统字体') return;
   assert(html.includes(token), 'font feature missing: ' + token);
 });
 assert(html.includes('https://fonts.googleapis.com/css2?family='), 'optional Web font loader missing');
@@ -59,7 +57,8 @@ assert(!startup.includes('loadSystemHistory('), 'homepage/startup must not load 
   'data-aim-lat=',
   'if (globePinned) return;',
   'globePinned = false;',
-  '地区' + ' · 已定位',
+  'globePinned && regionFilter',
+  ' · 已定位',
 ].forEach(function (token) {
   assert(html.includes(token), 'globe city pin feature missing: ' + token);
 });
