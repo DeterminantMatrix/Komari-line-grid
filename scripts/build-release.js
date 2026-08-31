@@ -37,7 +37,11 @@ function build() {
   });
   html = html.replace(/<script data-inline-src="([^"]+)"><\/script>/g, function (_m, rel) {
     let source = fs.readFileSync(path.join(root, rel), 'utf8');
-    if (rel === 'dist/js/app.js') source = slimApp(source);
+    if (rel === 'dist/js/app.js') {
+      source = slimApp(source)
+        .replace(/komari-rpc2/g, 'lite-rpc2')
+        .replace(/Komari/g, 'Lite');
+    }
     source = escScript(source);
     return '<script data-inline-source="' + rel + '">\n' + source + '\n<\/script>';
   });
