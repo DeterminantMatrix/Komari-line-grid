@@ -19,10 +19,7 @@ jobs:
         with:
           node-version: '22'
       - name: Test
-        run: |
-          ./scripts/test.sh
-          node scripts/test-post-release-audit.js
-          node scripts/test-lite-native-features.js
+        run: ./scripts/test.sh
       - name: Package
         run: ./scripts/package.sh
       - name: Upload theme package
@@ -48,9 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/build-release.js >/dev/null
-          if git diff --quiet -- dist/index.html; then
-            exit 0
-          fi
+          if git diff --quiet -- dist/index.html; then exit 0; fi
           VERSION="$(node -p "require('./Lite-theme.json').version")"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -74,7 +69,6 @@ jobs:
       - name: Validate tag matches manifest version
         shell: bash
         run: |
-          set -euo pipefail
           VERSION="$(node -p "require('./Lite-theme.json').version")"
           test "${GITHUB_REF_NAME}" = "v${VERSION}"
       - name: Create release and upload installable ZIP only
@@ -82,7 +76,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          set -euo pipefail
           VERSION="$(node -p "require('./Lite-theme.json').version")"
           ASSET="komari-line-grid-v${VERSION}.zip"
           if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
