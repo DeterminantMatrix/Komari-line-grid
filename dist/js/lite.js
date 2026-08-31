@@ -2,8 +2,14 @@
   'use strict';
 
   const LINE_GRID_PAGES = ['overview', 'ping', 'traffic', 'routes', 'system'];
+  const LITE_TRAFFIC_LABELS = {
+    period: 'Lite 后端校准 · 当前账期',
+    forecast: 'Lite 当前账期 + Metric Store 历史',
+    history: 'Metric Store · 历史日流量',
+  };
   let appliedPingRoute = '';
   let uiRefreshQueued = false;
+  let liteRuntimeActive = false;
 
   function safeSegment(value) {
     const raw = String(value || '');
@@ -46,6 +52,20 @@
   // Bridge those paths into Line Grid's existing hash router before app.js starts.
   normalizeNavigationPath();
 
+  function scheduleUICompatibility() {
+    if (uiRefreshQueued) return;
+    uiRefreshQueued = true;
+    Promise.resolve().then(refreshUICompatibility);
+  }
+
+  function markLiteRuntime(payload) {
+    if (payload && payload._runtime === 'lite') {
+      liteRuntimeActive = true;
+      scheduleUICompatibility();
+    }
+    return payload;
+  }
+
   function calcTraffic(up, down, type) {
     if (global.KomariAdapt && typeof global.KomariAdapt.calcTraffic === 'function') {
       return global.KomariAdapt.calcTraffic(up, down, type);
@@ -55,6 +75,7 @@
 
   function restoreLitePeriod(payload, latestRaw) {
     if (!payload || payload._runtime !== 'lite' || !Array.isArray(payload.servers)) return payload;
+    markLiteRuntime(payload);
     let latest = latestRaw && latestRaw.data && typeof latestRaw.data === 'object' ? latestRaw.data : (latestRaw || {});
     if (Array.isArray(latest)) {
       const mapped = {};
@@ -147,16 +168,45 @@
     });
   }
 
+  function replaceUnavailableLabel(selector, replacement) {
+    const nodes = global.document.querySelectorAll(selector);
+    nodes.forEach(function (node) {
+      if (String(node.textContent || '').trim() === '当前账期数据不可用') node.textContent = replacement;
+    });
+  }
+
+  function normalizeLiteTrafficLabels() {
+    if (!liteRuntimeActive) return;
+    replaceUnavailableLabel('.page-traffic .traffic-forecast small', LITE_TRAFFIC_LABELS.forecast);
+    replaceUnavailableLabel('.page-traffic .kpi .sub', LITE_TRAFFIC_LABELS.period);
+    replaceUnavailableLabel('.page-traffic .chart-fill .hero-sub', LITE_TRAFFIC_LABELS.history);
+  }
+
+  function clarifyTrafficLoss() {
+    const cards = global.document.querySelectorAll('.sheet > .kpi article');
+    cards.forEach(function (card) {
+      const label = card.querySelector && card.querySelector('.lbl');
+      const sub = card.querySelector && card.querySelector('.sub');
+      const loss = card.querySelector && card.querySelector('.loss-value');
+      if (!label || !sub || !loss || String(label.textContent || '').trim() !== '流量累计') return;
+      if (String(sub.textContent || '').indexOf('丢包') >= 0) return;
+      loss.insertAdjacentText('beforebegin', '丢包 ');
+    });
+  }
+
   function refreshUICompatibility() {
     uiRefreshQueued = false;
     normalizeBranding();
+    normalizeLiteTrafficLabels();
+    clarifyTrafficLoss();
     applyPingTaskFromQuery();
   }
 
-  function scheduleUICompatibility() {
-    if (uiRefreshQueued) return;
-    uiRefreshQueued = true;
-    Promise.resolve().then(refreshUICompatibility);
+  if (global.ProbeAPI && typeof global.ProbeAPI.fetchServers === 'function') {
+    const originalFetchServers = global.ProbeAPI.fetchServers;
+    global.ProbeAPI.fetchServers = function () {
+      return Promise.resolve(originalFetchServers.apply(this, arguments)).then(markLiteRuntime);
+    };
   }
 
   if (global.KomariAdapt && typeof global.KomariAdapt.mergeLatest === 'function') {
@@ -206,5 +256,8 @@
     navigationHashFromPath: navigationHashFromPath,
     normalizeNavigationPath: normalizeNavigationPath,
     applyPingTaskFromQuery: applyPingTaskFromQuery,
+    markLiteRuntime: markLiteRuntime,
+    normalizeLiteTrafficLabels: normalizeLiteTrafficLabels,
+    trafficLabels: Object.assign({}, LITE_TRAFFIC_LABELS),
   };
 })(window);
