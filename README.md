@@ -6,36 +6,35 @@
 
 ## Lite 流量架构
 
-从 Lite 适配版开始，**Line Grid 不再拥有流量重置机制**。主题不保存、不编辑、不迁移，也不在浏览器中重新计算账期。
-
-Lite 是唯一真相源：
+从 Lite 适配版开始，**Line Grid 不再拥有独立的流量重置机制**。主题不保存、不编辑、不迁移第二套重置配置，Lite 是流量账期与计费状态的唯一真相源。
 
 ```text
 Lite Client / trafficledger
   ├─ traffic_reset_day              重置策略
   ├─ effective_traffic_limit/type   当前有效额度/计费方式
   ├─ calibrated net_total_up/down   当前账期权威流量
-  └─ Lite traffic calibration       账期边界与校准
+  └─ traffic calibration            账期与校准
 
 Lite Metric Store
   └─ traffic.up / traffic.down      历史流量序列
 
 Line Grid
-  └─ 只读取并展示以上结果
+  └─ 读取 + 展示 + 展示层预测
 ```
 
 具体规则：
 
 - `common:getNodesLatestStatus` 的 `net_total_up/down` 作为 Lite 当前账期的权威流量值。
-- 节点额度优先使用 Lite 的 `effective_traffic_limit / effective_traffic_type`。
-- `public:queryMetrics` 只用于近几日历史流量和图表，不覆盖当前账期总量。
-- Line Grid 不再提供 `trafficResetDay`、`billingTimeZone`、`trafficResetOverrides`。
-- Line Grid 不再提供自定义“流量重置日编辑器”或旧设置迁移器。
-- Line Grid 不再根据重置日在浏览器计算 `period_start / period_end`。
-- Lite 模式不再显示主题自行推导的“距重置 N 天”和“预计可撑过本账期”等预测。
-- 重置日、账期、流量校准和日账本统一在 Lite 自身后台管理。
+- 节点额度使用 Lite 的 `effective_traffic_limit / effective_traffic_type`。
+- `public:queryMetrics` 只用于历史流量、日流量图表和展示层趋势分析，不覆盖当前账期总量。
+- Line Grid 不提供 `trafficResetDay`、`billingTimeZone`、`trafficResetOverrides`。
+- Line Grid 不提供自定义重置日编辑器，也不迁移旧主题重置配置。
+- Lite 原生 `traffic_reset_day` 可以被 Line Grid 读取，用于显示“距重置 N 天”和账期起止日期；这一计算只影响 UI，不参与流量统计、校准或后台配置。
+- Lite 的账期规则使用 Asia/Shanghai；Line Grid 的显示窗口按相同规则镜像，并处理每月 29/30/31 日的月底截断。
+- Traffic 页的额度耗尽预测属于展示层预测：以 Lite 当前用量、Lite 限额、Metric Store 历史流量和 Lite 重置日为输入，不写回 Lite，也不改变任何账期状态。
+- 重置配置、流量校准和日账本始终统一在 Lite 后台管理。
 
-Lite 后端原生提供流量校准与日流量接口，包括：
+Lite 后端原生提供流量管理接口，包括：
 
 ```text
 /api/admin/client/{uuid}/traffic-calibration
@@ -43,6 +42,18 @@ Lite 后端原生提供流量校准与日流量接口，包括：
 ```
 
 这些属于 Lite 管理能力，不由主题复制实现。
+
+## Lite 节点顺序
+
+Lite 后端的默认节点顺序是：
+
+```text
+weight ASC → created_at ASC → uuid ASC
+```
+
+`common:getNodes` 最终返回 UUID map，因此 JSON 对象本身不能可靠表达查询顺序。Line Grid 会读取 Lite 节点的 `weight / created_at / uuid` 重建这一原生顺序。
+
+Lite manifest 的 `offlineServerPosition` 默认值为 `Keep`，所以默认不会因为节点离线而再次改变 Lite 后台顺序。用户主动选择 First / Last 时才进行额外位置调整。
 
 ## Lite deep-link / Dashboard 导航
 
@@ -53,7 +64,7 @@ Lite 后端原生提供流量校准与日流量接口，包括：
 /network/node/{uuid}/ping
 ```
 
-Line Grid 自身仍保留 hash router。`dist/js/lite.js` 会在 `app.js` 启动前把上述 Lite 路径桥接为 Line Grid 内部路由，因此不需要重写主题主路由。
+Line Grid 自身仍保留 hash router。`dist/js/lite.js` 会在 `app.js` 启动前把上述 Lite 路径桥接为 Line Grid 内部路由。
 
 Lite Dashboard 的丢包排行如果附带：
 
@@ -61,13 +72,14 @@ Lite Dashboard 的丢包排行如果附带：
 ?ping_task=<task_id>
 ```
 
-兼容层会自动进入节点 Ping 页面，并在对应 Ping Task 控件出现后自动选中它。
+兼容层会自动进入节点 Ping 页面并选择对应 Ping Task。
 
 ## 主要功能
 
 - 桌面端和移动端自适应节点列表、详情、网络与资源视图
 - RPC2 / Metric Store 实时状态、Ping 历史和流量历史
-- Lite 当前账期流量与有效额度展示
+- Lite 当前账期流量、有效额度、重置倒计时与展示层预测
+- 按 Lite 原生顺序展示节点
 - 节点搜索、异常筛选和 Last Seen
 - Low / Medium / High 三档地球渲染精度
 - 节点地区、城市、经纬度、服务商、回程线路等扩展元数据
@@ -86,13 +98,11 @@ Lite Dashboard 的丢包排行如果附带：
 - `public:queryMetrics`（历史流量）
 - `common:getMe`
 - `admin:getClient`
-- `admin:editClient`（回程线路标签）
+- `admin:editClient`（仅用于 Line Grid 的回程线路标签编辑，不用于流量重置）
 
 ## Lite 与旧 Komari
 
 ### Komari Lite
-
-Lite 后端完全负责流量生命周期：
 
 ```text
 Lite trafficledger
@@ -104,9 +114,13 @@ Lite effective traffic quota
   -> effective_traffic_limit/type
   -> Line Grid 配额展示
 
+Lite traffic_reset_day
+  -> Line Grid 重置日期/倒计时显示
+  -> 不写回、不参与计费
+
 Lite Metric Store
   -> traffic.up / traffic.down
-  -> Line Grid 近几日历史图表
+  -> Line Grid 历史图表/展示层预测
 ```
 
 ### 旧 Komari
@@ -190,9 +204,14 @@ node scripts/build-release.js --check
 - Lite clean-path → hash-router deep-link 桥接
 - `ping_task` 自动选择对应 Ping Task
 - 双 manifest 一致性与 Lite navigation 合约
-- manifest 不再包含主题级流量重置设置
-- 发布包不再包含自定义重置日编辑器
-- Lite API 路径不再调用主题侧 `billingWindow`
+- manifest 不包含主题级流量重置设置
+- 发布包不包含自定义重置日编辑器
+- Lite API 数据路径不调用旧主题 `billingWindow`
+- Lite `traffic_reset_day` 的显示窗口、月底截断、关闭/null 语义
+- Lite 原生 `weight → created_at → uuid` 节点顺序
+- 默认 `offlineServerPosition=Keep`
+- Traffic DOM 兼容写入保持幂等，MutationObserver 不监听 `characterData`，防止自激重绘
+- Traffic 预测与重置倒计时不会被 Lite 兼容层隐藏
 - GeoIP 公网 IP 门禁
 - 自包含 HTML 可重复构建
 - ZIP 完整性
