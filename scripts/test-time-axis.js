@@ -7,17 +7,28 @@ const { slimApp } = require('./slim-app');
 const { slimDemo } = require('./slim-demo');
 const { fixApp, fixCharts } = require('./runtime-fixes');
 const { fixAppTimeAxis, fixChartsTimeAxis } = require('./time-axis-fix');
+const { refineLatency } = require('./refine-v051-latency');
 
 function assert(cond, message) {
   if (!cond) throw new Error(message);
 }
 
-const app = fixAppTimeAxis(fixApp(slimDemo(slimApp(fs.readFileSync('dist/js/app.js', 'utf8')))));
+const app = refineLatency(fixAppTimeAxis(fixApp(slimDemo(slimApp(fs.readFileSync('dist/js/app.js', 'utf8'))))));
 assert(app.includes('function pingWindowDomain()'), 'shared latency time domain missing');
 assert(app.includes('opt.domainStart = domain.start'), 'latency charts do not receive fixed domain start');
 assert(app.includes('opt.domainEnd = domain.end'), 'latency charts do not receive fixed domain end');
 assert(app.includes('t: p && p.t != null ? Number(p.t) : null'), 'cached latency timestamps are discarded');
 assert(app.includes('t: b.t'), 'live bucket timestamps are discarded');
+assert(app.includes('point && typeof point === "object"'), 'timestamped latency points are still rejected by empty-state detection');
+assert(app.includes('multiSeries.length === 1'), 'single Ping Task fallback is missing');
+
+const latencyFnMatch = app.match(/  function hasLatencyValues\(values\) \{([\s\S]*?)\n  \}/);
+assert(latencyFnMatch, 'hasLatencyValues helper not found');
+const hasLatencyValues = new Function('values', latencyFnMatch[1]);
+assert(hasLatencyValues([{ v: 34, t: Date.now() }]) === true, 'timestamped {v,t} latency point was treated as empty');
+assert(hasLatencyValues([{ value: 34, t: Date.now() }]) === true, 'timestamped {value,t} latency point was treated as empty');
+assert(hasLatencyValues([34]) === true, 'numeric latency point was treated as empty');
+assert(hasLatencyValues([{ v: -1, t: Date.now() }]) === false, 'loss-only latency points should remain empty for chart-value detection');
 
 const chartSource = fixChartsTimeAxis(fixCharts(fs.readFileSync('dist/js/charts.js', 'utf8')));
 const sandbox = {
@@ -81,4 +92,4 @@ const generic = C.multiSpark([
 ], { w: 960, h: 220, showYAxis: true, showXAxis: true });
 assert(firstMultiX(generic) < 100, 'generic multiSpark behavior unexpectedly changed without a fixed domain');
 
-console.log('truthful latency time-axis tests passed');
+console.log('truthful latency time-axis and display tests passed');
