@@ -86,4 +86,13 @@ function loadLite(pathname, search, hash) {
   assert(r.api.isPublicIPLiteral('fd00::1') === false, 'ULA IPv6 accepted');
 }
 
+{
+  const r = loadLite('/', '', '');
+  assert(r.api.trafficLabels.period === 'Lite 后端校准 · 当前账期', 'Lite current-cycle label missing');
+  assert(r.api.trafficLabels.forecast.indexOf('Metric Store') >= 0, 'Lite forecast source label missing');
+  assert(r.api.trafficLabels.history === 'Metric Store · 历史日流量', 'Lite history label missing');
+  const payload = { _runtime: 'lite', servers: [] };
+  assert(r.api.markLiteRuntime(payload) === payload, 'Lite runtime marker must preserve payload');
+}
+
 console.log('Lite compatibility tests passed');
