@@ -15,6 +15,7 @@ const { refineCharts, refineApi, refineLite, refineCss } = require('./refine-v05
 const { refineAppVisual, refineChartsVisual, refineCssVisual } = require('./refine-v051-visual');
 const { refineFinalApp, refineFinalCss } = require('./refine-v051-final');
 const { refineDeadCodeApp } = require('./refine-v051-deadcode');
+const { hardenEnrich, hardenApi, hardenLite, hardenApp } = require('./hardening-v056');
 
 const root = path.resolve(__dirname, '..');
 const templatePath = path.join(root, 'src/index.html');
@@ -55,15 +56,17 @@ function build() {
         .replace(/Komari RPC2/g, 'Lite RPC2')
         .replace(/komari-rpc2/g, 'lite-rpc2')
         .replace(/Komari/g, 'Lite');
-      source = refineDeadCodeApp(refineFinalApp(refineAppVisual(refineApp(source))));
+      source = hardenApp(refineDeadCodeApp(refineFinalApp(refineAppVisual(refineApp(source)))));
     } else if (rel === 'dist/js/charts.js') {
       source = refineChartsVisual(refineCharts(fixChartsTimeAxis(fixCharts(source))));
     } else if (rel === 'dist/js/lite-adapter.js') {
       source = refineAdapter(fixAdapter(source));
+    } else if (rel === 'dist/js/enrich.js') {
+      source = hardenEnrich(source);
     } else if (rel === 'dist/js/api.js') {
-      source = refineApi(source);
+      source = hardenApi(refineApi(source));
     } else if (rel === 'dist/js/lite.js') {
-      source = refineLite(fixLite(source));
+      source = hardenLite(refineLite(fixLite(source)));
     }
     source = escScript(source);
     return '<script data-inline-source="' + rel + '">\n' + source + '\n<\/script>';
