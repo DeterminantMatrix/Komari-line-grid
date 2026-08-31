@@ -3067,7 +3067,7 @@ window.ProbeConfig = {
   const GEO_PUBLIC_PREFIX = 'linegrid:geo-public:v1:';
   const GEO_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
   const GEO_NEG_TTL = 6 * 60 * 60 * 1000;
-  const FX_CACHE_KEY = 'linegrid:fx:cny:v1';
+  const FX_CACHE_KEY = 'linegrid:fx:cny:v2';
   const FX_TTL = 24 * 60 * 60 * 1000;
   const FX_DEFAULT = {
     CNY: 1, USD: 0.142536, HKD: 1.108377, EUR: 0.12102, GBP: 0.105581,
@@ -3228,17 +3228,16 @@ window.ProbeConfig = {
 
   async function enrichNodes(payload) {
     if (!payload || !Array.isArray(payload.servers)) return payload;
+    // Disabled means disabled: do not even apply browser-cached GeoIP-derived
+    // city/coordinate data. Explicit Lite/metadata fields remain untouched.
+    if (payload.enable_ip_geo_asn !== true) return payload;
 
-    // A sanitized city/coordinate cache is keyed only by node UUID. It contains
-    // no IP, ASN or organisation data, so logged-out views can still keep the
-    // same city-level region labels without exposing administrator-only data.
     payload.servers.forEach(function (server) {
       if (!server || !server.uuid) return;
       const cached = cacheRead(publicGeoKey(server.uuid), GEO_CACHE_TTL);
       if (cached && validGeo(cached)) applyGeo(server, cached, false);
     });
 
-    if (payload.enable_ip_geo_asn !== true) return payload;
     const nodes = payload.servers.filter(function (s) { return s && s._lookup_ip && String(s._lookup_ip).indexOf('*') < 0; });
     const batchSize = 4;
     const lookupOptions = { provider: payload.geo_ip_provider || 'ip.sb', fallback: payload.geo_ip_fallback === true };
@@ -3262,22 +3261,23 @@ window.ProbeConfig = {
   }
 
   function normalizeCurrency(value) {
-    const s = String(value || 'CNY').trim().toUpperCase();
-    if (s === '$') return 'USD';
+    const s = String(value == null || value === '' ? 'CNY' : value).trim().toUpperCase();
+    if (s === '$' || s === 'US$') return 'USD';
     if (s === 'HK$') return 'HKD';
     if (s === '€') return 'EUR';
     if (s === '£') return 'GBP';
     if (s === '¥' || s === '￥' || s === 'RMB' || s === 'CNH') return 'CNY';
-    return FX_DEFAULT[s] != null ? s : 'CNY';
+    return /^[A-Z]{3}$/.test(s) ? s : '';
   }
 
   function sanitizeRates(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const out = Object.assign({}, FX_DEFAULT, { CNY: 1 });
     let count = 0;
-    Object.keys(FX_DEFAULT).forEach(function (code) {
-      if (code === 'CNY') return;
-      const v = number(raw[code]);
+    Object.keys(raw).forEach(function (rawCode) {
+      const code = String(rawCode || "").trim().toUpperCase();
+      if (code === 'CNY' || !/^[A-Z]{3}$/.test(code)) return;
+      const v = number(raw[rawCode]);
       if (v != null && v > 0) { out[code] = v; count += 1; }
     });
     return count >= 4 ? out : null;
@@ -3866,7 +3866,6 @@ window.ProbeConfig = {
   'use strict';
 
   let lastPayload = null;
-  let pollHandle = null;
   let rpcSeq = 0;
   const seriesInFlight = Object.create(null);
 
@@ -3933,6 +3932,10 @@ window.ProbeConfig = {
     return rpc('common:getRecords', { type: 'ping', uuid: '', hours: 1, task_id: -1, maxCount: 8000 }, 12000)
       .then(function (raw) {
         LiteAdapt.mergePingHistory(lastPayload, raw);
+        return lastPayload;
+      })
+      .catch(function () {
+        lastPayload._ping_history_status = 'unavailable';
         return lastPayload;
       });
   }
@@ -4028,6 +4031,7 @@ window.ProbeConfig = {
     let stopped = false;
     let running = false;
     let timer = null;
+    let statusTick = 0;
 
     function clear() {
       if (timer) clearTimeout(timer);
@@ -4042,11 +4046,15 @@ window.ProbeConfig = {
     function refresh() {
       if (stopped || running || document.hidden || !lastPayload) return;
       running = true;
-      rpc('common:getNodesLatestStatus', {}, 8000)
+      statusTick += 1;
+      // High-frequency status refreshes do not need the relatively expensive
+      // Ping summary. Refresh Ping once per minute; initial fetch is already full.
+      const includePing = statusTick % 30 === 0;
+      rpc('common:getNodesLatestStatus', includePing ? {} : { compact: true }, 8000)
         .then(function (latest) {
           if (stopped) return;
           LiteAdapt.mergeLatest(lastPayload, latest);
-          if (typeof onPayload === 'function') onPayload(lastPayload, { kind: 'latest' });
+          if (typeof onPayload === 'function') onPayload(lastPayload, { kind: 'latest', ping: includePing });
         })
         .catch(function () {})
         .finally(function () {
@@ -4057,19 +4065,23 @@ window.ProbeConfig = {
 
     function visible() {
       if (document.hidden) clear();
-      else if (!running) refresh();
+      else if (!running) {
+        // Force a full refresh after returning to the tab so Ping badges do not
+        // remain stale after a long suspension.
+        statusTick = 29;
+        refresh();
+      }
     }
 
     document.addEventListener('visibilitychange', visible);
     schedule();
-    pollHandle = {
+    return {
       close: function () {
         stopped = true;
         clear();
         document.removeEventListener('visibilitychange', visible);
       },
     };
-    return pollHandle;
   }
 
   global.ProbeAPI = {
@@ -4197,21 +4209,25 @@ window.ProbeConfig = {
     if (!m) return false;
     const p = m.slice(1).map(Number);
     if (p.some(function (n) { return n < 0 || n > 255; })) return false;
-    const a = p[0], b = p[1];
+    const a = p[0], b = p[1], c = p[2];
     if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
     if (a === 100 && b >= 64 && b <= 127) return false;
     if (a === 169 && b === 254) return false;
     if (a === 172 && b >= 16 && b <= 31) return false;
     if (a === 192 && b === 168) return false;
-    if (a === 192 && b === 0) return false;
-    if (a === 198 && (b === 18 || b === 19 || b === 51)) return false;
-    if (a === 203 && b === 0) return false;
+    if (a === 192 && b === 0 && (c === 0 || c === 2)) return false;
+    if (a === 198 && (b === 18 || b === 19)) return false;
+    if (a === 198 && b === 51 && c === 100) return false;
+    if (a === 203 && b === 0 && c === 113) return false;
     return true;
   }
 
   function validPublicIPv6(raw) {
     const value = String(raw || '').trim().toLowerCase();
     if (!value || value.indexOf(':') < 0 || value.indexOf('*') >= 0 || /[^0-9a-f:.]/.test(value)) return false;
+    // Do not send IPv4-mapped/embedded dotted literals to third-party GeoIP;
+    // validating their embedded IPv4 semantics here would be error-prone.
+    if (value.indexOf('.') >= 0) return false;
     if (value === '::' || value === '::1') return false;
     if (/^f[cd]/.test(value) || /^fe[89ab]/.test(value) || /^ff/.test(value)) return false;
     if (/^2001:db8(?::|$)/.test(value)) return false;
@@ -5161,8 +5177,8 @@ window.ProbeConfig = {
     let monthly = 0, monthlyCount = 0, remaining = 0, remainingCount = 0;
     let free = 0, oneTime = 0, due30 = 0, expired = 0;
     (rows || []).forEach(function (row) {
-      if (Number.isFinite(Number(row.monthly))) { monthly += Number(row.monthly); monthlyCount += 1; }
-      if (Number.isFinite(Number(row.remainingValue))) { remaining += Number(row.remainingValue); remainingCount += 1; }
+      if (row.monthly != null && Number.isFinite(Number(row.monthly))) { monthly += Number(row.monthly); monthlyCount += 1; }
+      if (row.remainingValue != null && Number.isFinite(Number(row.remainingValue))) { remaining += Number(row.remainingValue); remainingCount += 1; }
       if (Number(row.server && row.server.price) === -1) free += 1;
       if (Number(row.server && row.server.billing_cycle) === -1) oneTime += 1;
       const d = expiryDeltaDays(row.server);
@@ -5243,7 +5259,8 @@ window.ProbeConfig = {
 
   function pingMs(server) {
     const p = primaryPing(server);
-    const v = p && Number(p.current_ms);
+    if (!p || p.current_ms == null) return null;
+    const v = Number(p.current_ms);
     return Number.isFinite(v) && v >= 0 ? v : null;
   }
 
@@ -5259,6 +5276,7 @@ window.ProbeConfig = {
   }
 
   function latencyTone(ms) {
+    if (ms == null || ms === '') return '';
     const v = Number(ms);
     if (!Number.isFinite(v) || v < 0) return "";
     if (v > 180) return " is-bad";
@@ -5267,6 +5285,7 @@ window.ProbeConfig = {
   }
 
   function lossTone(value) {
+    if (value == null || value === '') return '';
     const v = Number(value);
     if (!Number.isFinite(v) || v < 0) return "";
     if (v >= 10) return " is-bad";
@@ -5530,8 +5549,11 @@ window.ProbeConfig = {
   function anomalyDetails(server) {
     const out = [];
     if (!server || !server.online) out.push({ key: 'offline', label: '离线', tone: 'bad' });
-    const ms = pingMs(server);
-    const loss = pingLoss(server);
+    const pings = server && server.online && Array.isArray(server.ping) ? server.ping : [];
+    const latencies = pings.map(function (p) { return p && p.current_ms != null ? Number(p.current_ms) : null; }).filter(function (v) { return v != null && Number.isFinite(v) && v >= 0; });
+    const losses = pings.map(function (p) { return p && p.loss_pct != null ? Number(p.loss_pct) : null; }).filter(function (v) { return v != null && Number.isFinite(v) && v >= 0; });
+    const ms = latencies.length ? Math.max.apply(null, latencies) : null;
+    const loss = losses.length ? Math.max.apply(null, losses) : null;
     const traffic = trafficQuotaPct(server);
     const expiry = expiryDeltaDays(server);
     const pressure = server && server.online ? resourcePressure(server) : -1;
@@ -5962,11 +5984,16 @@ window.ProbeConfig = {
   function renderFoot() {
     const t = totals();
     const trafficScope = t.limit ? ("有限额合计 " + fmtBytes(t.limit, 2) + (t.unlimited ? " · 无限流量 " + t.unlimited + " 台" : "")) : "全部无限流量";
-    const source = liveMode ? "Lite RPC2" : "连接中";
+    const stamps = (state.servers || []).map(function (server) { return Number(server && server.last_seen_at); }).filter(Number.isFinite);
+    const latestAt = stamps.length ? Math.max.apply(null, stamps) : null;
+    const ageSeconds = latestAt == null ? null : Math.max(0, Math.floor((Date.now() - latestAt) / 1000));
+    const stale = liveMode && ageSeconds != null && ageSeconds > 15;
+    const source = !liveMode ? "连接中" : (stale ? ("Lite RPC2 · 状态 " + ageSeconds + "s 前") : "Lite RPC2");
+    const statusTime = latestAt == null ? "—" : clock(new Date(latestAt));
     foot.innerHTML =
       "<div>总使用流量　<b>" + fmtBytes(t.used, 2) + "</b>　" + h(trafficScope) + "</div>" +
       "<div>在线服务器　<b>" + t.online + " / " + t.all + "</b></div>" +
-      "<div class='foot-update'><span>最后更新　<b>" + clock(new Date()) + "</b></span><span class='foot-meta'>" + source + "　·　Line Grid · Lite</span></div>";
+      "<div class='foot-update'><span>状态时间　<b>" + h(statusTime) + "</b></span><span class='foot-meta'>" + h(source) + "　·　Line Grid · Lite</span></div>";
   }
 
   function listEmpty() {
@@ -6833,9 +6860,11 @@ window.ProbeConfig = {
 
   function resourcePressure(server) {
     const values = [server && server.cpu_pct, pctMetric(server && server.mem_used, server && server.mem_total), pctMetric(server && server.disk_used, server && server.disk_total)]
+      .filter(function (value) { return value != null && value !== ''; })
       .map(Number).filter(Number.isFinite);
     return values.length ? Math.max.apply(null, values) : -1;
   }
+
   function renderResource() {
     const servers = state.servers || [];
     const week = resourceWeekRows(servers);
@@ -7294,6 +7323,8 @@ window.ProbeConfig = {
     }).catch(function () { return null; });
   }
 
+  const chartPointCache = new WeakMap();
+
   (function bindChartTip() {
     const tip = document.getElementById("chart-tip");
     if (!tip) return;
@@ -7306,10 +7337,16 @@ window.ProbeConfig = {
       }
       lastSvg = svg;
       if (svg) {
-        const pack = (svg.getAttribute("data-pts") || "").split(";").map(function (row) {
-          const p = row.split(",");
-          return { x: Number(p[0]), y: Number(p[1]), v: Number(p[2]) };
-        }).filter(function (p) { return Number.isFinite(p.x); });
+        const rawPoints = svg.getAttribute("data-pts") || "";
+        let cachedPoints = chartPointCache.get(svg);
+        if (!cachedPoints || cachedPoints.raw !== rawPoints) {
+          cachedPoints = { raw: rawPoints, pack: rawPoints.split(";").map(function (row) {
+            const p = row.split(",");
+            return { x: Number(p[0]), y: Number(p[1]), v: Number(p[2]) };
+          }).filter(function (p) { return Number.isFinite(p.x); }) };
+          chartPointCache.set(svg, cachedPoints);
+        }
+        const pack = cachedPoints.pack;
         const box = svg.getBoundingClientRect();
         const vb = svg.viewBox.baseVal;
         const rawX = ((ev.clientX - box.left) / Math.max(1, box.width)) * vb.width;
@@ -7354,7 +7391,7 @@ window.ProbeConfig = {
     });
   })();
 
-  setInterval(renderFoot, 1000);
+  setInterval(renderFoot, 10000);
 
   (function startGlobeIdle() {
     let last = 0;
