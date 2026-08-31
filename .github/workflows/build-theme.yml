@@ -2,7 +2,7 @@ name: Build theme
 
 on:
   push:
-    branches: [main, release/v0.5.1]
+    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -13,6 +13,28 @@ permissions:
 jobs:
   test-and-package:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test
+        run: |
+          ./scripts/test.sh
+          node scripts/test-post-release-audit.js
+      - name: Package
+        run: ./scripts/package.sh
+      - name: Upload theme package
+        uses: actions/upload-artifact@v4
+        with:
+          name: komari-line-grid-theme
+          path: komari-line-grid-v*.zip
+          if-no-files-found: error
+
+  sync-generated-index:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
+    needs: test-and-package
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
@@ -20,13 +42,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Test
-        run: ./scripts/test.sh
-      - name: Sync generated release index on main
-        if: github.ref == 'refs/heads/main'
+      - name: Build and sync generated release index
         shell: bash
         run: |
           set -euo pipefail
+          node scripts/build-release.js >/dev/null
           if git diff --quiet -- dist/index.html; then
             exit 0
           fi
@@ -36,14 +56,6 @@ jobs:
           git add dist/index.html
           git commit -m "build: sync v${VERSION} release index"
           git push
-      - name: Package
-        run: ./scripts/package.sh
-      - name: Upload theme package
-        uses: actions/upload-artifact@v4
-        with:
-          name: komari-line-grid-theme
-          path: komari-line-grid-v*.zip
-          if-no-files-found: error
 
   github-release:
     if: startsWith(github.ref, 'refs/tags/v')
