@@ -1,7 +1,7 @@
 {
   "name": "Line Grid",
   "short": "line-grid",
-  "description": "Line Grid v0.4.3 for Komari RPC2: reproducible release builds, CI validation, configurable billing time zone, GeoIP provider controls, lazy FX loading, stable globe quality, billing-period traffic semantics, anomaly/search workflow and incremental live updates.",
+  "description": "Line Grid v0.4.3 for Komari RPC2: responsive infrastructure views, latency, traffic history, resources, billing metadata, GeoIP controls and incremental live updates. Traffic-cycle management is delegated to the backend.",
   "version": "0.4.3",
   "author": "line-grid theme contributors / DeterminantMatrix",
   "url": "https://github.com/DeterminantMatrix/Komari-line-grid",
@@ -28,8 +28,8 @@
           "zh-CN": "离线节点位置"
         },
         "help": {
-          "en": "First, Keep, or Last. Within each group nodes follow Komari weight order.",
-          "zh-CN": "First / Keep / Last；组内严格按 Komari weight 顺序。"
+          "en": "First, Keep, or Last. Within each group nodes follow backend weight order.",
+          "zh-CN": "First / Keep / Last；组内按后端 weight 顺序。"
         },
         "options": "First,Keep,Last",
         "default": "Last"
@@ -51,65 +51,11 @@
           "zh-CN": "地球精度"
         },
         "help": {
-          "en": "Low uses simplified continents and the lowest refresh rate; Medium keeps detailed land with reduced coastline sampling; High uses the full coastline and densest links. Quality is fixed while running to avoid visual flicker.",
-          "zh-CN": "低：简化大陆+最低刷新率；中：完整大陆但降低海岸线采样与连线密度；高：完整海岸线、最密连线和最高刷新率。运行时固定档位，不再自动切换精度，避免闪烁。"
+          "en": "Low uses simplified continents and the lowest refresh rate; Medium keeps detailed land with reduced coastline sampling; High uses the full coastline and densest links.",
+          "zh-CN": "低：简化大陆+最低刷新率；中：完整大陆但降低海岸线采样与连线密度；高：完整海岸线、最密连线和最高刷新率。"
         },
         "options": "Low,Medium,High",
         "default": "Medium"
-      },
-      {
-        "type": "title",
-        "name": {
-          "en": "Traffic cycle",
-          "zh-CN": "流量账期"
-        }
-      },
-      {
-        "key": "trafficResetDay",
-        "type": "number",
-        "name": {
-          "en": "Default traffic reset day",
-          "zh-CN": "默认流量重置日"
-        },
-        "help": {
-          "en": "Used by nodes without a per-node override. Range: 1-31.",
-          "zh-CN": "未单独填写的 VPS 使用这里的日期；范围 1～31。"
-        },
-        "default": 1
-      },
-      {
-        "key": "billingTimeZone",
-        "type": "select",
-        "name": {
-          "en": "Billing time zone",
-          "zh-CN": "流量账期时区"
-        },
-        "help": {
-          "en": "Used for billing-cycle boundaries, daily traffic aggregation and reset countdown. Default: Asia/Shanghai.",
-          "zh-CN": "用于账期起止、每日流量聚合和“距重置”倒计时。默认上海时区 Asia/Shanghai。"
-        },
-        "options": "Asia/Shanghai,UTC,Asia/Hong_Kong,Asia/Tokyo,Asia/Singapore,Asia/Seoul,America/Los_Angeles,America/New_York,Europe/London,Europe/Amsterdam,Europe/Berlin,Australia/Sydney",
-        "default": "Asia/Shanghai"
-      },
-      {
-        "type": "textbox",
-        "name": {
-          "en": "<style>#trafficResetOverrides{display:none!important}</style><iframe title=\"Per-node traffic reset editor\" src=\"/themes/line-grid/dist/admin-reset-editor.html?v=0430\" style=\"display:block;width:100%;height:470px;border:0;background:transparent\" loading=\"eager\"></iframe>",
-          "zh-CN": "<style>#trafficResetOverrides{display:none!important}</style><iframe title=\"节点独立流量重置日编辑器\" src=\"/themes/line-grid/dist/admin-reset-editor.html?v=0430\" style=\"display:block;width:100%;height:470px;border:0;background:transparent\" loading=\"eager\"></iframe>"
-        }
-      },
-      {
-        "key": "trafficResetOverrides",
-        "type": "richtext",
-        "name": {
-          "en": "Per-node traffic reset days",
-          "zh-CN": "节点独立流量重置日"
-        },
-        "help": {
-          "en": "One node per line: VPS name = day. UUID = day is also accepted. Example: My HK VPS = 15. Range: 1-31. Empty nodes use the default above.",
-          "zh-CN": "一行一台：VPS名称 = 日期；也支持 UUID = 日期。例：华纳云HK = 15。日期范围 1～31；未填写的节点使用上方默认值。适合大量 VPS 批量维护。"
-        },
-        "default": ""
       },
       {
         "type": "title",
@@ -126,8 +72,8 @@
           "zh-CN": "启用 GeoIP / ASN 识别"
         },
         "help": {
-          "en": "Opt-in. Full node IPs visible to your current account are sent to public GeoIP providers. Results are cached without storing the IP in the cache key.",
-          "zh-CN": "隐私敏感，默认关闭。开启后会将当前账号可见的完整节点 IP 发送给公共 GeoIP 服务；缓存键不保存明文 IP。"
+          "en": "Opt-in. Full node IPs visible to your current account are sent to public GeoIP providers.",
+          "zh-CN": "隐私敏感，默认关闭。开启后会将当前账号可见的完整公网节点 IP 发送给公共 GeoIP 服务。"
         },
         "default": false
       },
@@ -140,7 +86,7 @@
         },
         "help": {
           "en": "Primary public GeoIP service. Only used when GeoIP / ASN enrichment is enabled.",
-          "zh-CN": "GeoIP / ASN 识别开启后使用的首选公共服务。默认只请求这一家。"
+          "zh-CN": "GeoIP / ASN 识别开启后使用的首选公共服务。"
         },
         "options": "ip.sb,ipinfo.io,ipwho.is,ipapi.co",
         "default": "ip.sb"
