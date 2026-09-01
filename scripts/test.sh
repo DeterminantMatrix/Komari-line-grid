@@ -13,6 +13,11 @@ for(const t of ['common:getNodes','common:getNodesLatestStatus','common:getPubli
 if(/<link[^>]+fonts\.(?:googleapis|gstatic)\.com/i.test(h)||!s.includes('https://fonts.googleapis.com/css2?family=')||!c.includes('html[data-font-mode="system"]')) throw new Error('font mode');
 const startup=s.slice(s.lastIndexOf('render();\n  ProbeAPI.fetchServers()')); if(!startup.includes('ProbeAPI.fetchServers()')||startup.includes('loadSystemHistory(')) throw new Error('history not lazy');
 if(/data-inline-(?:src|href)=/.test(h)||/(?:src|href)="\.\/(?:app\.(?:js|css)|src\/)/.test(h)||!h.includes('data:image/png;base64,')) throw new Error('not self-contained');
+if(/电信\|telecom|移动\|mobile|联通\|unicom/.test(s.slice(s.indexOf('function multiSpark'), s.indexOf('function ruler', s.indexOf('function multiSpark')) > -1 ? s.indexOf('function ruler', s.indexOf('function multiSpark')) : s.length))) throw new Error('ping color tied to provider label');
+if(!s.includes("const palette = ['#e2ad45', '#58a6ff', '#e06c75', '#65c18c', '#b48ead', '#d08770'];")) throw new Error('multi-series palette');
+if(!s.includes('const palette = ["#e2ad45", "#58a6ff", "#e06c75", "#65c18c", "#b48ead", "#d08770"];')) throw new Error('single-series palette');
+if(!s.includes('if (key === "latency") { const v = pingMs(server); return v == null ? null : v; }')) throw new Error('latency null sentinel');
+if(!s.includes('return aMissing ? 1 : -1;')) throw new Error('latency missing-last sort');
 console.log('flattened Lite-only runtime checks passed');
 NODE
 python3 - <<'PY'

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.1
+
+- Give each Ping series a distinct palette color by task order instead of forcing carrier-name colors that could collapse several lines into the same yellow.
+- Keep Ping colors consistent across multi-series charts and single-task views using the same six-color theme palette.
+- When sorting the node list by latency, always place nodes with missing latency at the end in both descending and ascending modes.
+- Retain the v0.6.0 Lite backend Ping task ordering behavior.
+
 ## v0.6.0
 
 - Match Ping task ordering to the Lite backend across node detail legends, latency selectors, Network view, and historical multi-series charts.

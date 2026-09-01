@@ -1761,11 +1761,8 @@
     const plotH = Math.max(1, h - padT - padB);
     const plotBottom = padT + plotH;
     function seriesColor(item, i) {
-      const label = String(item && (item.label || item.key) || '');
-      if (/电信|telecom/i.test(label)) return '#e2ad45';
-      if (/移动|mobile/i.test(label)) return '#58a6ff';
-      if (/联通|unicom/i.test(label)) return '#e06c75';
-      return ['#e2ad45', '#58a6ff', '#e06c75', '#65c18c'][i % 4];
+      const palette = ['#e2ad45', '#58a6ff', '#e06c75', '#65c18c', '#b48ead', '#d08770'];
+      return palette[(Number(i) || 0) % palette.length];
     }
     const colors = series.map(seriesColor);
     const dashes = ['', '', '', '6 3'];
@@ -2417,11 +2414,7 @@
   }
 
   function pingColor(p, fallbackIndex) {
-    const label = String(p && (p.label || p.key) || "");
-    if (/电信|telecom/i.test(label)) return "#e2ad45";
-    if (/移动|mobile/i.test(label)) return "#58a6ff";
-    if (/联通|unicom/i.test(label)) return "#e06c75";
-    const palette = ["#e2ad45", "#58a6ff", "#e06c75", "#65c18c"];
+    const palette = ["#e2ad45", "#58a6ff", "#e06c75", "#65c18c", "#b48ead", "#d08770"];
     return palette[(Number(fallbackIndex) || 0) % palette.length];
   }
 
@@ -3069,7 +3062,7 @@
     if (key === "name") return String(server.name || "").toLowerCase();
     if (key === "status") return server.online ? 1 : 0;
     if (key === "speed") return Number(server.download_speed || 0) + Number(server.upload_speed || 0);
-    if (key === "latency") { const v = pingMs(server); return v == null ? -1 : v; }
+    if (key === "latency") { const v = pingMs(server); return v == null ? null : v; }
     if (key === "cpu") return Number(server.cpu_pct == null ? -1 : server.cpu_pct);
     if (key === "memory") return pctMetric(server.mem_used, server.mem_total) ?? -1;
     if (key === "disk") return pctMetric(server.disk_used, server.disk_total) ?? -1;
@@ -3088,6 +3081,14 @@
     if (anomalyFilter) base = base.filter(function (item) { return isAnomalous(item.s); });
     if (!applyInteractiveSort || !listSortKey || !listSortDir) return base;
     return base.map(function (item, idx) { return { item: item, idx: idx, value: listSortValue(item.s, listSortKey) }; }).sort(function (a, b) {
+      if (listSortKey === "latency") {
+        const aMissing = a.value == null || !Number.isFinite(Number(a.value));
+        const bMissing = b.value == null || !Number.isFinite(Number(b.value));
+        if (aMissing || bMissing) {
+          if (aMissing && bMissing) return a.idx - b.idx;
+          return aMissing ? 1 : -1;
+        }
+      }
       let cmp = 0;
       if (typeof a.value === "string" || typeof b.value === "string") cmp = String(a.value).localeCompare(String(b.value), "zh-CN", { numeric: true, sensitivity: "base" });
       else cmp = Number(a.value) - Number(b.value);
