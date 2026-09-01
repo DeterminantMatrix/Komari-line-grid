@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Line Grid</title>
   <meta name="description" content="Line Grid server monitoring theme for Lite.">
-  <meta name="line-grid-version" content="0.6.5">
+  <meta name="line-grid-version" content="0.6.6">
   <script>
     (function () {
       var t = localStorage.getItem("mmwx-theme") === "light" ? "light" : "dark";
@@ -4899,6 +4899,8 @@ html[data-font-mode="system"] {
   let pulse = [];
   let liveMode = false;
   let seriesCache = {};
+  let seriesCacheAt = {};
+  let seriesLoadInFlight = {};
   let seriesCacheOrder = [];
   const SERIES_CACHE_MAX = 64;
   let lastWindowKey = "";
@@ -6222,13 +6224,34 @@ html[data-font-mode="system"] {
   function seriesPut(key, value) {
     if (!value) return;
     seriesCache[key] = value;
+    seriesCacheAt[key] = Date.now();
     const pos = seriesCacheOrder.indexOf(key);
     if (pos >= 0) seriesCacheOrder.splice(pos, 1);
     seriesCacheOrder.push(key);
     while (seriesCacheOrder.length > SERIES_CACHE_MAX) {
       const old = seriesCacheOrder.shift();
       delete seriesCache[old];
+      delete seriesCacheAt[old];
+      delete seriesLoadInFlight[old];
     }
+  }
+
+  function seriesTTLForRange(value) {
+    const key = String(value || '1h').toLowerCase();
+    if (key === '7d') return 10 * 60 * 1000;
+    if (key === '24h') return 5 * 60 * 1000;
+    if (key === '6h') return 2 * 60 * 1000;
+    return 60 * 1000;
+  }
+
+  function seriesRefreshKey(index, target) {
+    return String(index) + ':' + range + ':' + (target || 'all');
+  }
+
+  function seriesNeedsRefresh(index, target) {
+    const key = seriesRefreshKey(index, target);
+    if (!seriesCache[key]) return true;
+    return Date.now() - Number(seriesCacheAt[key] || 0) >= seriesTTLForRange(range);
   }
 
   function nodeCtx(index) {
@@ -7735,6 +7758,7 @@ html[data-font-mode="system"] {
     }
     if (info && (info.kind === "latest" || info.kind === "metric-ping")) {
       if (!globeDrag) patchLiveUI(info);
+      if (info.kind === "metric-ping") refreshVisibleSeries();
       return;
     }
     rebuildPulse();
@@ -7747,11 +7771,45 @@ html[data-font-mode="system"] {
   function loadSeries(index, tgt) {
     if (!liveMode || index == null) return Promise.resolve();
     const t = tgt !== undefined ? tgt : (targetKey || "all");
-    const key = String(index) + ":" + range + ":" + (t || "all");
-    return ProbeAPI.fetchSeries(index, range, t || "all").then(function (payload) {
+    const key = seriesRefreshKey(index, t || "all");
+    if (seriesLoadInFlight[key]) return seriesLoadInFlight[key];
+    const task = ProbeAPI.fetchSeries(index, range, t || "all").then(function (payload) {
       if (payload) seriesPut(key, payload);
       return payload;
-    }).catch(function () { return null; });
+    }).catch(function () { return null; }).finally(function () {
+      delete seriesLoadInFlight[key];
+    });
+    seriesLoadInFlight[key] = task;
+    return task;
+  }
+
+  function loadSeriesIfStale(index, tgt) {
+    if (!liveMode || index == null) return Promise.resolve(false);
+    const t = tgt !== undefined ? tgt : (targetKey || "all");
+    if (!seriesNeedsRefresh(index, t || "all")) return Promise.resolve(false);
+    return loadSeries(index, t).then(function (payload) { return !!payload; });
+  }
+
+  function refreshVisibleSeries() {
+    const r = route();
+    if (r.home === "network") {
+      if (!netKey) return Promise.resolve(false);
+      return loadSeriesIfStale(netKey, netTarget || "all").then(function (changed) {
+        const now = route();
+        if (changed && now.home === "network" && String(netKey || "")) renderBoard(now);
+        return changed;
+      });
+    }
+    if (r.node == null || (r.page !== "overview" && r.page !== "ping")) return Promise.resolve(false);
+    const targets = r.page === "ping" ? [latencyTargetKey || "all", "all"] : [targetKey || "all", "all"];
+    const unique = [];
+    targets.forEach(function (target) { if (unique.indexOf(target) < 0) unique.push(target); });
+    return Promise.all(unique.map(function (target) { return loadSeriesIfStale(r.node, target); })).then(function (results) {
+      const changed = results.some(Boolean);
+      const now = route();
+      if (changed && String(now.node == null ? "" : now.node) === String(r.node) && now.page === r.page) renderWindow(r.node, r.page);
+      return changed;
+    });
   }
 
   const chartPointCache = new WeakMap();
@@ -7929,6 +7987,8 @@ html[data-font-mode="system"] {
   const originalMergePingHistory = adapt.mergePingHistory;
 
   const TASK_TTL_MS = 60000;
+  const STATIC_RECONCILE_MS = 2 * 60 * 1000;
+  const TRAFFIC_HISTORY_REFRESH_MS = 5 * 60 * 1000;
   let taskCache = { at: 0, items: null, inflight: null };
   let lastPayload = null;
 
@@ -8403,14 +8463,97 @@ html[data-font-mode="system"] {
     });
   };
 
+  function nativeShanghaiDateKey(nowValue) {
+    const date = new Date(Number(nowValue == null ? Date.now() : nowValue) + 8 * 3600000);
+    return String(date.getUTCFullYear()).padStart(4, '0') + '-' +
+      String(date.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(date.getUTCDate()).padStart(2, '0');
+  }
+
+  function sameBillingIdentity(a, b) {
+    return Number(a && a.price) === Number(b && b.price) &&
+      Number(a && a.billing_cycle) === Number(b && b.billing_cycle) &&
+      String(a && a.currency || '') === String(b && b.currency || '') &&
+      String(a && a.expires_at_raw || '') === String(b && b.expires_at_raw || '');
+  }
+
+  function reconcileStaticServer(prior, next, preserveGeo) {
+    if (!prior) return next;
+    const merged = Object.assign({}, prior, next);
+    if (Array.isArray(prior.ping) && prior.ping.length) merged.ping = prior.ping;
+    if (Array.isArray(prior.daily_traffic)) merged.daily_traffic = prior.daily_traffic;
+    ['traffic_history_status', 'traffic_history_days', 'traffic_retention_days'].forEach(function (key) {
+      if (prior[key] != null) merged[key] = prior[key];
+    });
+
+    const sameLookup = String(prior._lookup_ip || '') === String(next._lookup_ip || '');
+    if (preserveGeo && sameLookup) {
+      ['region_city', 'geo_country', 'longitude', 'latitude', 'asn', 'asn_org', 'geo_source', 'provider_name', 'provider_url'].forEach(function (key) {
+        const value = next[key];
+        if ((value == null || value === '') && prior[key] != null && prior[key] !== '') merged[key] = prior[key];
+      });
+    }
+
+    if (sameBillingIdentity(prior, next)) {
+      ['_billing_monthly_cny', '_billing_yearly_cny', '_billing_remaining_value_cny'].forEach(function (key) {
+        if (prior[key] != null) merged[key] = prior[key];
+      });
+    } else {
+      delete merged._billing_monthly_cny;
+      delete merged._billing_yearly_cny;
+      delete merged._billing_remaining_value_cny;
+    }
+    return merged;
+  }
+
+  function reconcileStaticPayload(current, fresh) {
+    if (!current || !fresh || !Array.isArray(fresh.servers)) return current || fresh;
+    const priorById = Object.create(null);
+    (current.servers || []).forEach(function (server) { if (server && server.uuid) priorById[String(server.uuid)] = server; });
+    const preserveGeo = fresh.enable_ip_geo_asn === true;
+    const mergedServers = fresh.servers.map(function (server) {
+      return reconcileStaticServer(priorById[String(server.uuid || '')], server, preserveGeo);
+    });
+    ['title', 'appearance', 'show_globe', 'globe_quality', 'offline_server_position', 'enable_ip_geo_asn', 'geo_ip_provider', 'geo_ip_fallback', 'billing_timezone', '_public'].forEach(function (key) {
+      if (Object.prototype.hasOwnProperty.call(fresh, key)) current[key] = fresh[key];
+    });
+    current.servers = typeof adapt.sortServers === 'function' ? adapt.sortServers(mergedServers) : mergedServers;
+    if (global.LineGridLite && typeof global.LineGridLite.applyLiteDisplayWindows === 'function') {
+      global.LineGridLite.applyLiteDisplayWindows(current);
+    }
+    return rememberPayload(current);
+  }
+
+  function fetchStaticSnapshot() {
+    const current = currentPayload();
+    if (!current) return Promise.resolve(null);
+    return runBatch([
+      { method: 'common:getNodes', params: {} },
+      { method: 'common:getNodesLatestStatus', params: { compact: true }, fallback: {} },
+      { method: 'common:getPublicInfo', params: {}, fallback: {} },
+    ], 10000).then(function (parts) {
+      const fresh = originalSnapshot(parts[0], parts[1], parts[2]);
+      if (global.LineGridLite && typeof global.LineGridLite.applyLiteDisplayWindows === 'function') {
+        global.LineGridLite.applyLiteDisplayWindows(fresh);
+      }
+      const merged = reconcileStaticPayload(current, fresh);
+      return api.enrich(merged, { loadFx: false }).then(function (next) { return rememberPayload(next || merged); }).catch(function () { return merged; });
+    });
+  }
+
   // Compact status stays on Lite's native current-status RPC every two seconds.
-  // Ping statistics/series refresh separately from Metric Store once per minute,
-  // avoiding getNodesLatestStatus's legacy Ping aggregation path.
+  // Ping statistics/series refresh separately from Metric Store once per minute.
+  // Static node metadata is reconciled every two minutes (and on tab return),
+  // while traffic history refreshes every five minutes.
   api.connectWS = function (onPayload) {
     let stopped = false;
     let running = false;
     let timer = null;
     let tick = 0;
+    let lastStaticAt = Date.now();
+    let lastTrafficAt = Date.now();
+    let lastShanghaiDay = nativeShanghaiDateKey(Date.now());
+    let forceStatic = false;
 
     function clear() {
       if (timer) clearTimeout(timer);
@@ -8422,6 +8565,47 @@ html[data-font-mode="system"] {
       if (!stopped && !document.hidden) timer = setTimeout(refresh, 2000);
     }
 
+    function emit(payload, info) {
+      if (!stopped && payload && typeof onPayload === 'function') onPayload(payload, info);
+    }
+
+    function maintenance(payload, now) {
+      const tasks = [];
+      const day = nativeShanghaiDateKey(now);
+      if (day !== lastShanghaiDay) {
+        lastShanghaiDay = day;
+        if (global.LineGridLite && typeof global.LineGridLite.applyLiteDisplayWindows === 'function') {
+          global.LineGridLite.applyLiteDisplayWindows(payload, now);
+        }
+        emit(payload, { kind: 'cycle-rollover' });
+      }
+
+      if (forceStatic || now - lastStaticAt >= STATIC_RECONCILE_MS) {
+        forceStatic = false;
+        lastStaticAt = now;
+        tasks.push(fetchStaticSnapshot().then(function (next) {
+          if (next) emit(next, { kind: 'static-reconcile' });
+          return next;
+        }));
+      }
+
+      if (tick % 30 === 0) {
+        tasks.push(api.fetchPingOverview().then(function (next) {
+          if (next) emit(next, { kind: 'metric-ping', ping: true });
+          return next;
+        }));
+      }
+
+      if (now - lastTrafficAt >= TRAFFIC_HISTORY_REFRESH_MS) {
+        lastTrafficAt = now;
+        tasks.push(api.fetchTrafficHistory().then(function (next) {
+          if (next) emit(next, { kind: 'traffic-history' });
+          return next;
+        }));
+      }
+      return Promise.allSettled(tasks);
+    }
+
     function refresh() {
       const payload = currentPayload();
       if (stopped || running || document.hidden || !payload) return;
@@ -8431,18 +8615,21 @@ html[data-font-mode="system"] {
         .then(function (latest) {
           if (stopped) return null;
           adapt.mergeLatest(payload, latest);
-          if (typeof onPayload === 'function') onPayload(payload, { kind: 'latest', ping: false });
-          if (tick % 30 !== 0) return null;
-          return api.fetchPingOverview().then(function (next) {
-            if (!stopped && next && typeof onPayload === 'function') onPayload(next, { kind: 'metric-ping', ping: true });
-          });
+          emit(payload, { kind: 'latest', ping: false });
+          return maintenance(payload, Date.now());
         })
         .catch(function () {})
         .finally(function () { running = false; schedule(); });
     }
 
     function visible() {
-      if (!document.hidden) { clear(); refresh(); }
+      if (document.hidden) {
+        clear();
+        return;
+      }
+      forceStatic = true;
+      clear();
+      refresh();
     }
 
     document.addEventListener('visibilitychange', visible);
@@ -8457,7 +8644,7 @@ html[data-font-mode="system"] {
   };
 
   global.LineGridNativeData = {
-    version: '0.6.5',
+    version: '0.6.6',
     ping: 'public:getPingMetricStats + public:queryMetrics',
     system: 'public:queryMetrics',
     billing: 'admin:getBillingServers',

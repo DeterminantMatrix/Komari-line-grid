@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.6
+
+- Reconcile Lite static node metadata every two minutes and immediately after returning to a visible tab, so node add/remove, names, limits, reset days, prices, expiry and public settings update without a browser refresh.
+- Recompute Asia/Shanghai traffic billing windows when the calendar day changes, preventing stale billing-period/reset countdown values across midnight or reset-day boundaries.
+- Refresh traffic history every five minutes so 7-day bars, daily averages, peaks, forecasts and monthly pulse stay aligned with current counters.
+- Add range-aware visible Ping-series TTL refresh (1H 60s, 6H 2m, 24H 5m, 7D 10m) for node Overview/Latency and Network charts, with in-flight request deduplication.
+- Preserve live Ping, traffic history, GeoIP enrichment and unchanged native Billing values across static reconciliation; changed billing inputs safely fall back to current node pricing until the next native billing hydration.
+
 ## v0.6.5
 
 - Restore traffic billing-period dates and reset countdown after the RPC Batch bootstrap path by applying Lite reset-day display windows to `fetchBootstrap()` results.

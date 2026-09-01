@@ -15,6 +15,8 @@
   const originalMergePingHistory = adapt.mergePingHistory;
 
   const TASK_TTL_MS = 60000;
+  const STATIC_RECONCILE_MS = 2 * 60 * 1000;
+  const TRAFFIC_HISTORY_REFRESH_MS = 5 * 60 * 1000;
   let taskCache = { at: 0, items: null, inflight: null };
   let lastPayload = null;
 
@@ -489,14 +491,97 @@
     });
   };
 
+  function nativeShanghaiDateKey(nowValue) {
+    const date = new Date(Number(nowValue == null ? Date.now() : nowValue) + 8 * 3600000);
+    return String(date.getUTCFullYear()).padStart(4, '0') + '-' +
+      String(date.getUTCMonth() + 1).padStart(2, '0') + '-' +
+      String(date.getUTCDate()).padStart(2, '0');
+  }
+
+  function sameBillingIdentity(a, b) {
+    return Number(a && a.price) === Number(b && b.price) &&
+      Number(a && a.billing_cycle) === Number(b && b.billing_cycle) &&
+      String(a && a.currency || '') === String(b && b.currency || '') &&
+      String(a && a.expires_at_raw || '') === String(b && b.expires_at_raw || '');
+  }
+
+  function reconcileStaticServer(prior, next, preserveGeo) {
+    if (!prior) return next;
+    const merged = Object.assign({}, prior, next);
+    if (Array.isArray(prior.ping) && prior.ping.length) merged.ping = prior.ping;
+    if (Array.isArray(prior.daily_traffic)) merged.daily_traffic = prior.daily_traffic;
+    ['traffic_history_status', 'traffic_history_days', 'traffic_retention_days'].forEach(function (key) {
+      if (prior[key] != null) merged[key] = prior[key];
+    });
+
+    const sameLookup = String(prior._lookup_ip || '') === String(next._lookup_ip || '');
+    if (preserveGeo && sameLookup) {
+      ['region_city', 'geo_country', 'longitude', 'latitude', 'asn', 'asn_org', 'geo_source', 'provider_name', 'provider_url'].forEach(function (key) {
+        const value = next[key];
+        if ((value == null || value === '') && prior[key] != null && prior[key] !== '') merged[key] = prior[key];
+      });
+    }
+
+    if (sameBillingIdentity(prior, next)) {
+      ['_billing_monthly_cny', '_billing_yearly_cny', '_billing_remaining_value_cny'].forEach(function (key) {
+        if (prior[key] != null) merged[key] = prior[key];
+      });
+    } else {
+      delete merged._billing_monthly_cny;
+      delete merged._billing_yearly_cny;
+      delete merged._billing_remaining_value_cny;
+    }
+    return merged;
+  }
+
+  function reconcileStaticPayload(current, fresh) {
+    if (!current || !fresh || !Array.isArray(fresh.servers)) return current || fresh;
+    const priorById = Object.create(null);
+    (current.servers || []).forEach(function (server) { if (server && server.uuid) priorById[String(server.uuid)] = server; });
+    const preserveGeo = fresh.enable_ip_geo_asn === true;
+    const mergedServers = fresh.servers.map(function (server) {
+      return reconcileStaticServer(priorById[String(server.uuid || '')], server, preserveGeo);
+    });
+    ['title', 'appearance', 'show_globe', 'globe_quality', 'offline_server_position', 'enable_ip_geo_asn', 'geo_ip_provider', 'geo_ip_fallback', 'billing_timezone', '_public'].forEach(function (key) {
+      if (Object.prototype.hasOwnProperty.call(fresh, key)) current[key] = fresh[key];
+    });
+    current.servers = typeof adapt.sortServers === 'function' ? adapt.sortServers(mergedServers) : mergedServers;
+    if (global.LineGridLite && typeof global.LineGridLite.applyLiteDisplayWindows === 'function') {
+      global.LineGridLite.applyLiteDisplayWindows(current);
+    }
+    return rememberPayload(current);
+  }
+
+  function fetchStaticSnapshot() {
+    const current = currentPayload();
+    if (!current) return Promise.resolve(null);
+    return runBatch([
+      { method: 'common:getNodes', params: {} },
+      { method: 'common:getNodesLatestStatus', params: { compact: true }, fallback: {} },
+      { method: 'common:getPublicInfo', params: {}, fallback: {} },
+    ], 10000).then(function (parts) {
+      const fresh = originalSnapshot(parts[0], parts[1], parts[2]);
+      if (global.LineGridLite && typeof global.LineGridLite.applyLiteDisplayWindows === 'function') {
+        global.LineGridLite.applyLiteDisplayWindows(fresh);
+      }
+      const merged = reconcileStaticPayload(current, fresh);
+      return api.enrich(merged, { loadFx: false }).then(function (next) { return rememberPayload(next || merged); }).catch(function () { return merged; });
+    });
+  }
+
   // Compact status stays on Lite's native current-status RPC every two seconds.
-  // Ping statistics/series refresh separately from Metric Store once per minute,
-  // avoiding getNodesLatestStatus's legacy Ping aggregation path.
+  // Ping statistics/series refresh separately from Metric Store once per minute.
+  // Static node metadata is reconciled every two minutes (and on tab return),
+  // while traffic history refreshes every five minutes.
   api.connectWS = function (onPayload) {
     let stopped = false;
     let running = false;
     let timer = null;
     let tick = 0;
+    let lastStaticAt = Date.now();
+    let lastTrafficAt = Date.now();
+    let lastShanghaiDay = nativeShanghaiDateKey(Date.now());
+    let forceStatic = false;
 
     function clear() {
       if (timer) clearTimeout(timer);
@@ -508,6 +593,47 @@
       if (!stopped && !document.hidden) timer = setTimeout(refresh, 2000);
     }
 
+    function emit(payload, info) {
+      if (!stopped && payload && typeof onPayload === 'function') onPayload(payload, info);
+    }
+
+    function maintenance(payload, now) {
+      const tasks = [];
+      const day = nativeShanghaiDateKey(now);
+      if (day !== lastShanghaiDay) {
+        lastShanghaiDay = day;
+        if (global.LineGridLite && typeof global.LineGridLite.applyLiteDisplayWindows === 'function') {
+          global.LineGridLite.applyLiteDisplayWindows(payload, now);
+        }
+        emit(payload, { kind: 'cycle-rollover' });
+      }
+
+      if (forceStatic || now - lastStaticAt >= STATIC_RECONCILE_MS) {
+        forceStatic = false;
+        lastStaticAt = now;
+        tasks.push(fetchStaticSnapshot().then(function (next) {
+          if (next) emit(next, { kind: 'static-reconcile' });
+          return next;
+        }));
+      }
+
+      if (tick % 30 === 0) {
+        tasks.push(api.fetchPingOverview().then(function (next) {
+          if (next) emit(next, { kind: 'metric-ping', ping: true });
+          return next;
+        }));
+      }
+
+      if (now - lastTrafficAt >= TRAFFIC_HISTORY_REFRESH_MS) {
+        lastTrafficAt = now;
+        tasks.push(api.fetchTrafficHistory().then(function (next) {
+          if (next) emit(next, { kind: 'traffic-history' });
+          return next;
+        }));
+      }
+      return Promise.allSettled(tasks);
+    }
+
     function refresh() {
       const payload = currentPayload();
       if (stopped || running || document.hidden || !payload) return;
@@ -517,18 +643,21 @@
         .then(function (latest) {
           if (stopped) return null;
           adapt.mergeLatest(payload, latest);
-          if (typeof onPayload === 'function') onPayload(payload, { kind: 'latest', ping: false });
-          if (tick % 30 !== 0) return null;
-          return api.fetchPingOverview().then(function (next) {
-            if (!stopped && next && typeof onPayload === 'function') onPayload(next, { kind: 'metric-ping', ping: true });
-          });
+          emit(payload, { kind: 'latest', ping: false });
+          return maintenance(payload, Date.now());
         })
         .catch(function () {})
         .finally(function () { running = false; schedule(); });
     }
 
     function visible() {
-      if (!document.hidden) { clear(); refresh(); }
+      if (document.hidden) {
+        clear();
+        return;
+      }
+      forceStatic = true;
+      clear();
+      refresh();
     }
 
     document.addEventListener('visibilitychange', visible);
@@ -543,7 +672,7 @@
   };
 
   global.LineGridNativeData = {
-    version: '0.6.5',
+    version: '0.6.6',
     ping: 'public:getPingMetricStats + public:queryMetrics',
     system: 'public:queryMetrics',
     billing: 'admin:getBillingServers',

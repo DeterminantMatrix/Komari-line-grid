@@ -1952,6 +1952,8 @@
   let pulse = [];
   let liveMode = false;
   let seriesCache = {};
+  let seriesCacheAt = {};
+  let seriesLoadInFlight = {};
   let seriesCacheOrder = [];
   const SERIES_CACHE_MAX = 64;
   let lastWindowKey = "";
@@ -3275,13 +3277,34 @@
   function seriesPut(key, value) {
     if (!value) return;
     seriesCache[key] = value;
+    seriesCacheAt[key] = Date.now();
     const pos = seriesCacheOrder.indexOf(key);
     if (pos >= 0) seriesCacheOrder.splice(pos, 1);
     seriesCacheOrder.push(key);
     while (seriesCacheOrder.length > SERIES_CACHE_MAX) {
       const old = seriesCacheOrder.shift();
       delete seriesCache[old];
+      delete seriesCacheAt[old];
+      delete seriesLoadInFlight[old];
     }
+  }
+
+  function seriesTTLForRange(value) {
+    const key = String(value || '1h').toLowerCase();
+    if (key === '7d') return 10 * 60 * 1000;
+    if (key === '24h') return 5 * 60 * 1000;
+    if (key === '6h') return 2 * 60 * 1000;
+    return 60 * 1000;
+  }
+
+  function seriesRefreshKey(index, target) {
+    return String(index) + ':' + range + ':' + (target || 'all');
+  }
+
+  function seriesNeedsRefresh(index, target) {
+    const key = seriesRefreshKey(index, target);
+    if (!seriesCache[key]) return true;
+    return Date.now() - Number(seriesCacheAt[key] || 0) >= seriesTTLForRange(range);
   }
 
   function nodeCtx(index) {
@@ -4788,6 +4811,7 @@
     }
     if (info && (info.kind === "latest" || info.kind === "metric-ping")) {
       if (!globeDrag) patchLiveUI(info);
+      if (info.kind === "metric-ping") refreshVisibleSeries();
       return;
     }
     rebuildPulse();
@@ -4800,11 +4824,45 @@
   function loadSeries(index, tgt) {
     if (!liveMode || index == null) return Promise.resolve();
     const t = tgt !== undefined ? tgt : (targetKey || "all");
-    const key = String(index) + ":" + range + ":" + (t || "all");
-    return ProbeAPI.fetchSeries(index, range, t || "all").then(function (payload) {
+    const key = seriesRefreshKey(index, t || "all");
+    if (seriesLoadInFlight[key]) return seriesLoadInFlight[key];
+    const task = ProbeAPI.fetchSeries(index, range, t || "all").then(function (payload) {
       if (payload) seriesPut(key, payload);
       return payload;
-    }).catch(function () { return null; });
+    }).catch(function () { return null; }).finally(function () {
+      delete seriesLoadInFlight[key];
+    });
+    seriesLoadInFlight[key] = task;
+    return task;
+  }
+
+  function loadSeriesIfStale(index, tgt) {
+    if (!liveMode || index == null) return Promise.resolve(false);
+    const t = tgt !== undefined ? tgt : (targetKey || "all");
+    if (!seriesNeedsRefresh(index, t || "all")) return Promise.resolve(false);
+    return loadSeries(index, t).then(function (payload) { return !!payload; });
+  }
+
+  function refreshVisibleSeries() {
+    const r = route();
+    if (r.home === "network") {
+      if (!netKey) return Promise.resolve(false);
+      return loadSeriesIfStale(netKey, netTarget || "all").then(function (changed) {
+        const now = route();
+        if (changed && now.home === "network" && String(netKey || "")) renderBoard(now);
+        return changed;
+      });
+    }
+    if (r.node == null || (r.page !== "overview" && r.page !== "ping")) return Promise.resolve(false);
+    const targets = r.page === "ping" ? [latencyTargetKey || "all", "all"] : [targetKey || "all", "all"];
+    const unique = [];
+    targets.forEach(function (target) { if (unique.indexOf(target) < 0) unique.push(target); });
+    return Promise.all(unique.map(function (target) { return loadSeriesIfStale(r.node, target); })).then(function (results) {
+      const changed = results.some(Boolean);
+      const now = route();
+      if (changed && String(now.node == null ? "" : now.node) === String(r.node) && now.page === r.page) renderWindow(r.node, r.page);
+      return changed;
+    });
   }
 
   const chartPointCache = new WeakMap();
