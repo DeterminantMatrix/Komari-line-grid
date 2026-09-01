@@ -2856,3 +2856,11 @@ html[data-font-mode="system"] {
 
 .globe-selected-ring { fill:none; stroke:var(--ink); stroke-width:1.2; stroke-dasharray:2 2; vector-effect:non-scaling-stroke; }
 .globe-selected-core { fill:var(--ink); stroke:var(--void); stroke-width:1.4; vector-effect:non-scaling-stroke; }
+
+
+/* System detail long-value wrapping */
+.page-system .spec .val {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
