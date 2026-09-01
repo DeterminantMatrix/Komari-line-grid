@@ -1953,6 +1953,9 @@
   let anomalyFilter = false;
   let globePaintRAF = 0;
   let globeLiveTick = 0;
+  let domPatchActive = false;
+  let domPatchFreezeSVG = false;
+  let wakeGlobeIdle = function () {};
   let globePinned = false;
   let systemHistoryRange = "1h";
   const systemHistoryCache = Object.create(null);
@@ -2898,6 +2901,7 @@
     globeLat = Math.max(-78, Math.min(78, y));
     globePinned = true;
     queueGlobePaint();
+    wakeGlobeIdle();
     return true;
   }
 
@@ -2907,15 +2911,27 @@
     globeLon = ll[0];
     globeLat = Math.max(-78, Math.min(78, ll[1]));
     queueGlobePaint();
+    wakeGlobeIdle();
   }
 
   function liveSignature(server) {
     if (!server) return '0';
     const p = primaryPing(server) || {};
+    const mem = pctMetric(server.mem_used, server.mem_total);
+    const disk = pctMetric(server.disk_used, server.disk_total);
+    const cpu = server.cpu_pct == null ? null : Number(server.cpu_pct);
+    const quota = trafficQuotaPct(server);
+    const ms = p.current_ms == null || !Number.isFinite(Number(p.current_ms)) ? null : Math.round(Number(p.current_ms));
+    const loss = p.loss_pct == null || !Number.isFinite(Number(p.loss_pct)) ? null : Number(p.loss_pct);
+    function tenth(value) { return value == null || !Number.isFinite(Number(value)) ? null : Math.round(Number(value) * 10) / 10; }
     return String(hashText(JSON.stringify([
-      !!server.online, server.last_seen_at || 0, server.download_speed, server.upload_speed,
-      server.cpu_pct, server.mem_used, server.disk_used, server.traffic_used,
-      p.current_ms, p.loss_pct, server.uptime, remainingDaysNumber(server), trafficResetDays(server)
+      !!server.online,
+      server.online ? fmtDays(server.uptime) : lastSeenText(server),
+      fmtSpeed(server.download_speed), fmtSpeed(server.upload_speed),
+      tenth(cpu), tenth(mem), tenth(disk), tenth(quota),
+      fmtBytes(server.traffic_used, 1), ms, lossText(loss),
+      ms != null && ms > 80, ms != null && ms > 180, loss != null && loss > 20,
+      remainingDaysText(server), trafficResetDays(server)
     ])));
   }
 
@@ -3202,10 +3218,10 @@
     const stale = liveMode && ageSeconds != null && ageSeconds > 15;
     const source = !liveMode ? "连接中" : (stale ? ("Lite RPC2 · 状态 " + ageSeconds + "s 前") : "Lite RPC2");
     const statusTime = latestAt == null ? "—" : clock(new Date(latestAt));
-    foot.innerHTML =
+    patchInnerHTML(foot,
       "<div>总使用流量　<b>" + fmtBytes(t.used, 2) + "</b>　" + h(trafficScope) + "</div>" +
       "<div>在线服务器　<b>" + t.online + " / " + t.all + "</b></div>" +
-      "<div class='foot-update'><span>状态时间　<b>" + h(statusTime) + "</b></span><span class='foot-meta'>" + h(source) + "　·　Line Grid · Lite</span></div>";
+      "<div class='foot-update'><span>状态时间　<b>" + h(statusTime) + "</b></span><span class='foot-meta'>" + h(source) + "　·　Line Grid · Lite</span></div>");
   }
 
   function listEmpty() {
@@ -3731,14 +3747,14 @@
     const nav = document.getElementById("stage-nav");
     if (nav) {
       nav.style.display = accessState.is_admin ? "" : "none";
-      nav.innerHTML = visiblePages.map(function (key) {
+      patchInnerHTML(nav, visiblePages.map(function (key) {
         return '<button type="button" data-page="' + key + '" class="' + (current === key ? "is-on" : "") + '">' + PAGE_LABEL[key] + '</button>';
-      }).join("");
+      }).join(""));
     }
-    if (current === "ping") winBody.innerHTML = pagePing(ctx);
-    else if (current === "traffic") winBody.innerHTML = pageTraffic(ctx);
-    else if (current === "system") { winBody.innerHTML = pageSystem(ctx); setTimeout(function () { loadSystemHistory(s.uuid, systemHistoryRange); }, 0); }
-    else winBody.innerHTML = pageHTML(index);
+    if (current === "ping") patchInnerHTML(winBody, pagePing(ctx));
+    else if (current === "traffic") patchInnerHTML(winBody, pageTraffic(ctx));
+    else if (current === "system") { patchInnerHTML(winBody, pageSystem(ctx)); setTimeout(function () { loadSystemHistory(s.uuid, systemHistoryRange); }, 0); }
+    else patchInnerHTML(winBody, pageHTML(index));
     overlay.hidden = false;
     document.body.classList.add("is-locked");
     document.documentElement.classList.add("is-locked");
@@ -4029,6 +4045,14 @@
     );
   }
 
+  function globeViewportReady() {
+    if (!showGlobe || document.hidden || route().home !== "nodes") return false;
+    const atlas = main.querySelector(".atlas");
+    if (!atlas || !atlas.querySelector('svg')) return false;
+    const rect = atlas.getBoundingClientRect();
+    return rect.bottom >= 0 && rect.top <= window.innerHeight;
+  }
+
   function paintGlobe() {
     const svg = main.querySelector(".atlas svg");
     if (svg) svg.innerHTML = globeMarkup();
@@ -4054,6 +4078,7 @@
       moved: false,
     };
     atlas.classList.add("is-drag");
+    wakeGlobeIdle();
     try { atlas.setPointerCapture(ev.pointerId); } catch (e) {}
   }
 
@@ -4079,19 +4104,25 @@
     if (globeDrag.moved) globeSkipClick = true;
     globeDrag = null;
     queueGlobePaint();
+    wakeGlobeIdle();
   }
 
   function hideWindow() {
     overlay.hidden = true;
     document.body.classList.remove("is-locked");
     document.documentElement.classList.remove("is-locked");
-    winBody.innerHTML = "";
+    patchInnerHTML(winBody, "");
+  }
+
+  function setMainHTML(html) {
+    if (domPatchActive) patchInnerHTML(main, html);
+    else main.innerHTML = html;
   }
 
   function renderNetwork() {
     const servers = listedServers().map(function (item) { return item.s; });
     if (!servers.length) {
-      main.innerHTML = listEmpty();
+      setMainHTML(listEmpty());
       return;
     }
     if (!netKey || !servers.some(function (item) { return String(item.uuid) === String(netKey); })) netKey = servers[0].uuid;
@@ -4120,7 +4151,7 @@
       chart = hasLatencyValues(vals) ? ProbeCharts.spark(vals, Object.assign({}, chartOpts, { color: pingColor(sparkSrc, sparkIndex), fillOpacity: 0.11, tips: pingTips(vals, rangeStepMinutes(vals)) })) : '<div class="chart-empty">暂无该时间范围的 Ping 历史</div>';
     }
     if (!chart) chart = '<div class="chart-empty">暂无该时间范围的 Ping 历史</div>';
-    main.innerHTML =
+    setMainHTML(
       '<section class="subpage">' +
         "<p class='lead'>按服务器与探测目标查看延迟、丢包和时间范围；负值 Ping 会按丢包处理，不显示为负延迟。</p>" +
         '<div class="pick" style="margin-bottom:16px">' +
@@ -4153,7 +4184,7 @@
             return "<article><div class='lbl'>" + h(p.label) + "</div><div class='val' style='font-size:16px'>" + h(pingText(p)) + "</div><div class='hero-sub'>" + lossHTML(p.loss_pct) + " · avg " + h(p.avg_ms == null ? '—' : Math.round(p.avg_ms) + 'ms') + "</div></article>";
           }).join("") +
         "</div>" +
-      "</section>" + cycleBlock();
+      "</section>" + cycleBlock());
   }
 
   function calendarShiftKey(key, delta) {
@@ -4249,7 +4280,7 @@
           return "<article><div>" + h(s.expires_at || "—") + "</div><b>" + h(s.name) + "</b>" + h(remainingDaysText(s)) + "　" + h(canSeeFinance ? renewalText(s) : "*") + "</article>";
         }).join("") : '<div class="hero-sub">暂无可用的到期日期</div>') + "</div></div>";
     }
-    main.innerHTML = body + "</section>" + cycleBlock();
+    setMainHTML(body + "</section>" + cycleBlock());
   }
 
   function renderBoard(r) {
@@ -4297,6 +4328,7 @@
     if (r.node != null) renderWindow(r.node, r.page);
     else hideWindow();
     if (window.ProbeFX) ProbeFX.tickCounts(main);
+    if (r.home === "nodes") wakeGlobeIdle();
   }
 
   function openNode(index, page) {
@@ -4530,6 +4562,7 @@
     globeLon = 80;
     globeLat = 30;
     queueGlobePaint();
+    wakeGlobeIdle();
   });
   window.addEventListener("hashchange", render);
   window.addEventListener("keydown", onKey);
@@ -4583,45 +4616,143 @@
     return row(item.s, item.i);
   }
 
+  function patchDOMAttributes(current, next) {
+    const currentAttrs = Array.prototype.slice.call(current.attributes || []);
+    currentAttrs.forEach(function (item) {
+      if (!next.hasAttribute(item.name)) current.removeAttribute(item.name);
+    });
+    Array.prototype.forEach.call(next.attributes || [], function (item) {
+      if (current.getAttribute(item.name) !== item.value) current.setAttribute(item.name, item.value);
+    });
+  }
+
+  function patchDOMNode(current, next) {
+    if (!current || !next) return current;
+    if (current.nodeType !== next.nodeType) {
+      const replacement = next.cloneNode(true);
+      current.replaceWith(replacement);
+      return replacement;
+    }
+    if (current.nodeType === 3 || current.nodeType === 8) {
+      if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
+      return current;
+    }
+    if (current.nodeType !== 1) return current;
+    if (current.tagName !== next.tagName || current.namespaceURI !== next.namespaceURI) {
+      const replacement = next.cloneNode(true);
+      current.replaceWith(replacement);
+      return replacement;
+    }
+    if (domPatchFreezeSVG && current.namespaceURI === 'http://www.w3.org/2000/svg') return current;
+    if (current.isEqualNode && current.isEqualNode(next)) return current;
+    if (current.namespaceURI === 'http://www.w3.org/2000/svg') {
+      const replacement = next.cloneNode(true);
+      current.replaceWith(replacement);
+      return replacement;
+    }
+    const focused = current === document.activeElement;
+    patchDOMAttributes(current, next);
+    if (!focused && current.tagName === 'INPUT' && current.value !== next.value) current.value = next.value;
+    if (!focused && current.tagName === 'TEXTAREA' && current.value !== next.value) current.value = next.value;
+    patchDOMChildren(current, next);
+    return current;
+  }
+
+  function patchDOMChildren(current, next) {
+    let i = 0;
+    while (i < next.childNodes.length) {
+      const wanted = next.childNodes[i];
+      const have = current.childNodes[i];
+      if (!have) current.appendChild(wanted.cloneNode(true));
+      else patchDOMNode(have, wanted);
+      i += 1;
+    }
+    while (current.childNodes.length > next.childNodes.length) current.removeChild(current.lastChild);
+  }
+
+  function htmlElement(html) {
+    const template = document.createElement('template');
+    template.innerHTML = String(html == null ? '' : html).trim();
+    return template.content.firstElementChild || null;
+  }
+
+  function patchElementFromHTML(current, html) {
+    if (!current) return null;
+    const next = htmlElement(html);
+    if (!next) return current;
+    return patchDOMNode(current, next);
+  }
+
+  function patchInnerHTML(target, html) {
+    if (!target) return;
+    const template = document.createElement('template');
+    template.innerHTML = String(html == null ? '' : html);
+    patchDOMChildren(target, template.content);
+  }
+
   function patchNodeCollection(view, items) {
     const host = main.querySelector(view === 'column' ? '.stack' : view === 'grid' ? '.board' : '.list');
     if (!host) return false;
     const existing = Array.prototype.filter.call(host.children, function (el) { return el && el.hasAttribute && el.hasAttribute('data-index'); });
-    const current = existing.map(function (el) { return el.getAttribute('data-index'); }).join('|');
-    const expected = items.map(function (item) { return String(item.i); }).join('|');
-    if (current !== expected) {
-      host.innerHTML = (view === 'list' ? listHead() : '') + items.map(function (item) { return nodeMarkup(view, item); }).join('');
-      return true;
-    }
-    existing.forEach(function (el, idx) {
-      const item = items[idx];
-      if (!item) return;
-      const sig = liveSignature(item.s);
-      if (el.getAttribute('data-live-sig') === sig) return;
-      el.outerHTML = nodeMarkup(view, item);
+    const byKey = Object.create(null);
+    existing.forEach(function (el) { byKey[String(el.getAttribute('data-index'))] = el; });
+    const expected = Object.create(null);
+    let cursor;
+    if (view === 'list') {
+      const mobileHead = host.querySelector('.mobile-row-h');
+      cursor = mobileHead ? mobileHead.nextSibling : host.firstChild;
+    } else cursor = host.firstChild;
+
+    items.forEach(function (item) {
+      const key = String(item.i);
+      expected[key] = true;
+      let el = byKey[key] || null;
+      if (!el) el = htmlElement(nodeMarkup(view, item));
+      else {
+        const sig = liveSignature(item.s);
+        if (el.getAttribute('data-live-sig') !== sig) el = patchElementFromHTML(el, nodeMarkup(view, item));
+      }
+      if (!el) return;
+      if (el !== cursor) host.insertBefore(el, cursor || null);
+      cursor = el.nextSibling;
+    });
+
+    existing.forEach(function (el) {
+      const key = String(el.getAttribute('data-index'));
+      if (!expected[key]) el.remove();
     });
     return true;
   }
 
-  function patchLiveUI() {
+  function patchLiveUI(info) {
     const r = route();
-    renderFoot();
-    if (r.home === "nodes") {
-      const fleet = main.querySelector(".fleet");
-      if (fleet) fleet.outerHTML = fleetStrip();
-      const items = listedServers(r.view === "list", true);
-      if (!patchNodeCollection(r.view || 'list', items)) renderBoard(r);
-      const count = main.querySelector('[data-anomaly-count]');
-      if (count) count.textContent = String(anomalySummary().total);
-      const notice = main.querySelector('.filter-notice');
-      if (notice && (anomalyFilter || nodeQuery)) notice.outerHTML = anomalyNotice();
-      globeLiveTick += 1;
-      if (showGlobe && globeLiveTick % 6 === 0 && main.querySelector('.atlas svg')) queueGlobePaint();
-    } else {
-      subpageLiveTick += 1;
-      if (subpageLiveTick % 3 === 0) renderBoard(r);
+    const force = !!(info && info.kind === 'metric-ping');
+    domPatchActive = true;
+    domPatchFreezeSVG = !!(info && info.kind === 'latest');
+    try {
+      renderFoot();
+      if (r.home === "nodes") {
+        const fleet = main.querySelector(".fleet");
+        if (fleet) patchElementFromHTML(fleet, fleetStrip());
+        const items = listedServers(r.view === "list", true);
+        if (!patchNodeCollection(r.view || 'list', items)) renderBoard(r);
+        const count = main.querySelector('[data-anomaly-count]');
+        if (count) count.textContent = String(anomalySummary().total);
+        const notice = main.querySelector('.filter-notice');
+        const noticeHTML = anomalyNotice();
+        if (notice && noticeHTML) patchElementFromHTML(notice, noticeHTML);
+        else if (notice && !noticeHTML) notice.remove();
+        globeLiveTick += 1;
+        if (globeLiveTick % 6 === 0 && globeViewportReady()) queueGlobePaint();
+      } else {
+        subpageLiveTick += 1;
+        if (force || subpageLiveTick % 3 === 0) renderBoard(r);
+      }
+      if (r.node != null) renderWindow(r.node, r.page);
+    } finally {
+      domPatchFreezeSVG = false;
+      domPatchActive = false;
     }
-    if (r.node != null) renderWindow(r.node, r.page);
   }
 
   function applyLive(payload, info) {
@@ -4644,8 +4775,8 @@
     if (state.show_globe === false && localStorage.getItem("mmwx-globe") == null) {
       showGlobe = false;
     }
-    if (info && info.kind === "latest") {
-      if (!globeDrag) patchLiveUI();
+    if (info && (info.kind === "latest" || info.kind === "metric-ping")) {
+      if (!globeDrag) patchLiveUI(info);
       return;
     }
     rebuildPulse();
@@ -4736,26 +4867,47 @@
   setInterval(renderFoot, 10000);
 
   (function startGlobeIdle() {
+    let timer = 0;
     let last = 0;
-    function frame(t) {
-      requestAnimationFrame(frame);
+    const reduce = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+
+    function schedule(delay) {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(tick, Math.max(16, Number(delay) || 16));
+    }
+
+    function canAdvance() {
+      if (!globeViewportReady() || globeDrag || globePinned) return false;
+      if (overlay && !overlay.hidden) return false;
+      if (reduce && reduce.matches) return false;
+      return true;
+    }
+
+    function tick() {
+      timer = 0;
+      const now = Date.now();
+      if (!canAdvance()) {
+        last = now;
+        schedule(500);
+        return;
+      }
       const cfg = globeProfile();
-      if (last && t - last < cfg.idleMs) return;
-      const dt = last ? Math.min(1000, t - last) : cfg.idleMs;
-      last = t;
-      if (!showGlobe || globeDrag || document.hidden) return;
-      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      if (route().home !== "nodes") return;
-      if (overlay && !overlay.hidden) return;
-      const atlas = main.querySelector(".atlas");
-      if (!atlas || !atlas.querySelector('svg')) return;
-      const rect = atlas.getBoundingClientRect();
-      if (rect.bottom < 0 || rect.top > window.innerHeight) return;
-      if (globePinned) return;
+      const dt = last ? Math.min(1000, Math.max(cfg.idleMs, now - last)) : cfg.idleMs;
+      last = now;
       globeLon = wrapLon(globeLon + dt * 0.0075);
       queueGlobePaint();
+      schedule(cfg.idleMs);
     }
-    requestAnimationFrame(frame);
+
+    wakeGlobeIdle = function () {
+      last = 0;
+      schedule(16);
+    };
+    document.addEventListener("visibilitychange", wakeGlobeIdle);
+    window.addEventListener("hashchange", wakeGlobeIdle);
+    window.addEventListener("resize", wakeGlobeIdle);
+    if (reduce && typeof reduce.addEventListener === "function") reduce.addEventListener("change", wakeGlobeIdle);
+    wakeGlobeIdle();
   })();
 
   function boot() {

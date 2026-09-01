@@ -11,8 +11,14 @@ for(const t of ['ProbeConfig','LINE_GRID_METADATA','loadMetadata(','metadataFor(
 if(!s.includes("function rpcUrl() {\n    return '/api/rpc2';")) throw new Error('RPC2 path');
 if(!s.includes('function rpcBatch(calls, timeoutMs)')||!s.includes('fetchBootstrap: fetchBootstrap')) throw new Error('RPC batch API missing');
 if(!n.includes('function runBatch(calls, timeoutMs)')||!n.includes('originalRpcBatch')) throw new Error('native RPC batch reuse missing');
+if(!s.includes('function patchDOMNode(current, next)')||!s.includes('function patchElementFromHTML(current, html)')||!s.includes('function patchInnerHTML(target, html)')) throw new Error('DOM patch helpers missing');
+if(!s.includes('if (domPatchActive) patchInnerHTML(main, html)')||!s.includes('patchInnerHTML(winBody')||!s.includes('patchInnerHTML(foot')) throw new Error('DOM patch coverage missing');
+if(s.includes('el.outerHTML = nodeMarkup(view, item)')||s.includes('fleet.outerHTML = fleetStrip()')) throw new Error('live subtree replacement regression');
+if(!s.includes("server.online ? fmtDays(server.uptime) : lastSeenText(server)")) throw new Error('display-level live signature missing');
+const idleStart=s.indexOf('(function startGlobeIdle()'); const bootStart=s.indexOf('function boot()', idleStart); const idle=idleStart>=0&&bootStart>idleStart?s.slice(idleStart,bootStart):'';
+if(!idle.includes('setTimeout(tick')||idle.includes('requestAnimationFrame(frame)')||!idle.includes('globeViewportReady()')||!idle.includes('schedule(500)')) throw new Error('Globe idle scheduler regression');
 const ap=[...s.matchAll(/[\"'](\/api\/[^\"']+)/g)].map(x=>x[1]); if(ap.some(x=>x!='/api/rpc2')) throw new Error('unexpected API');
-for(const t of ['common:getNodes','common:getNodesLatestStatus','common:getPublicInfo','common:getRecords','public:queryMetrics','const SYSTEM_HISTORY_TTL_MS = 90000','Date.now() - cached.at < SYSTEM_HISTORY_TTL_MS','globe-selected-ring','globe-selected-core','if (globePinned) return;']) if(!(s+c).includes(t)) throw new Error('missing '+t);
+for(const t of ['common:getNodes','common:getNodesLatestStatus','common:getPublicInfo','common:getRecords','public:queryMetrics','const SYSTEM_HISTORY_TTL_MS = 90000','Date.now() - cached.at < SYSTEM_HISTORY_TTL_MS','globe-selected-ring','globe-selected-core']) if(!(s+c).includes(t)) throw new Error('missing '+t);
 for(const t of [
   "public:getMe",
   "public:getPublicPingTasks",
@@ -27,7 +33,7 @@ for(const t of [
   "originalMergePingHistory",
   "shanghaiDayOfMonth",
   "common:getNodesLatestStatus', { compact: true }",
-  "version: '0.6.4'"
+  "version: '0.6.5'"
 ]) if(!n.includes(t)) throw new Error('missing native data guard '+t);
 if(!n.includes("return originalFetchSeries.call(api, uuid, range, target);")) throw new Error('native Ping fallback arguments');
 if(n.includes('liveAt > metricAt') || n.includes('keepNewerLive')) throw new Error('node status timestamp must not gate Metric Store Ping refresh');

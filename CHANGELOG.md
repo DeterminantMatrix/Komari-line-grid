@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.5
+
+- Patch high-frequency live DOM updates in place for fleet summary, keyed node rows/cards/slabs, footer, node-detail navigation/body, and Network/Resource refreshes instead of replacing whole subtrees.
+- Preserve keyed node elements while live sorting/reordering, and use display-level live signatures so unchanged online nodes are not rebuilt just because raw timestamps or counters advanced.
+- Keep chart SVGs stable during the 2-second compact status stream, while allowing minute Metric-Ping and user-driven renders to refresh changed charts normally.
+- Replace the always-running Globe idle `requestAnimationFrame` loop with an adaptive timer that advances only while the globe is visible, unpinned, unobscured, and motion is allowed; actual paints remain RAF-synchronized.
+- Gate periodic Globe status repaints by viewport visibility and reset the idle clock after relevant render, positioning, drag, visibility, route, and resize changes.
+
 ## v0.6.4
 
 - Batch the initial Lite bootstrap RPCs (`getNodes`, latest status, public info, browser login state, and Ping task definitions) into one `/api/rpc2` request, with an individual-RPC compatibility fallback.
