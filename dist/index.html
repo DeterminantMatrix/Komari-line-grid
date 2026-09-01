@@ -8040,6 +8040,22 @@ html[data-font-mode="system"] {
     }).filter(function (point) { return point.t != null; });
   }
 
+  function pingLatencyPoints(latencySeries, lossSeries) {
+    const lossByTime = Object.create(null);
+    metricPoints(lossSeries).forEach(function (point) {
+      if (point.t != null && Number.isFinite(point.value)) lossByTime[String(point.t)] = point.value;
+    });
+    return metricPoints(latencySeries).map(function (point) {
+      const lossValue = lossByTime[String(point.t)];
+      // Lite Metric Store may emit 0 for a lost probe. A zero-latency point is
+      // not meaningful here, so keep loss/missing samples as chart gaps.
+      if (!(point.value > 0) || (Number.isFinite(lossValue) && lossValue > 0)) {
+        return { t: point.t, value: -1 };
+      }
+      return point;
+    });
+  }
+
   function indexMetricSeries(raw, metricKey) {
     const out = Object.create(null);
     const list = raw && Array.isArray(raw.series) ? raw.series : [];
@@ -8098,7 +8114,7 @@ html[data-font-mode="system"] {
         const stat = stats[id] || {};
         const latencySeries = latency[id];
         const lossSeries = loss[id];
-        const buckets = metricPoints(latencySeries).slice(-24).map(function (point) { return { t: point.t, ms: point.value }; });
+        const buckets = pingLatencyPoints(latencySeries, lossSeries).slice(-24).map(function (point) { return { t: point.t, ms: point.value }; });
         const lastLatency = lastMetricPoint(latencySeries);
         const lastLoss = lastMetricPoint(lossSeries);
         const lossNow = lastLoss && lastLoss.value >= 0 ? lastLoss.value > 0 : null;
@@ -8186,7 +8202,7 @@ html[data-font-mode="system"] {
     const normalizedTarget = target && target !== 'all' ? String(target) : 'all';
     return loadPingTasks(false).then(function (tasks) {
       const params = {
-        metric_keys: ['ping.latency_ms'],
+        metric_keys: ['ping.latency_ms', 'ping.loss'],
         entity_ids: [String(uuid || '')],
         hours: hours,
         fill_empty: true,
@@ -8194,10 +8210,18 @@ html[data-font-mode="system"] {
       };
       if (normalizedTarget !== 'all') params.tags = { task_id: normalizedTarget };
       return originalRpc('public:queryMetrics', params, hours >= 168 ? 18000 : 12000).then(function (raw) {
-        const byTask = Object.create(null);
+        const latencyByTask = Object.create(null);
+        const lossByTask = Object.create(null);
         (raw && Array.isArray(raw.series) ? raw.series : []).forEach(function (series) {
           const id = taskIdFromSeries(series);
-          if (id) byTask[id] = metricPoints(series);
+          if (!id) return;
+          const metric = String(series.metric_key || '');
+          if (metric === 'ping.latency_ms') latencyByTask[id] = series;
+          else if (metric === 'ping.loss') lossByTask[id] = series;
+        });
+        const byTask = Object.create(null);
+        Object.keys(latencyByTask).forEach(function (id) {
+          byTask[id] = pingLatencyPoints(latencyByTask[id], lossByTask[id]);
         });
         const orderedIds = [];
         const seen = Object.create(null);

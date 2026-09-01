@@ -38,6 +38,7 @@ for(const t of [
 if(!n.includes("return originalFetchSeries.call(api, uuid, range, target);")) throw new Error('native Ping fallback arguments');
 if(n.includes('liveAt > metricAt') || n.includes('keepNewerLive')) throw new Error('node status timestamp must not gate Metric Store Ping refresh');
 if(!n.includes('Metric Store is the primary Ping source here.')) throw new Error('native Ping authority guard missing');
+if(!n.includes('function pingLatencyPoints(latencySeries, lossSeries)')||!n.includes("metric_keys: ['ping.latency_ms', 'ping.loss']")||!n.includes('lossValue > 0')) throw new Error('Ping loss gap guard missing');
 if(!n.includes("payload._billing_source = 'lite-native'")) throw new Error('Lite Billing source missing');
 for(const t of ['public:getPingMetricStats','public:getPublicPingTasks','cpu.usage','admin:getBillingServers','LineGridNativeData']) if(!h.includes(t)) throw new Error('native data layer not inlined: '+t);
 if(h.includes('correctness.js')) throw new Error('stale correctness script in release');
