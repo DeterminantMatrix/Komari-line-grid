@@ -3308,7 +3308,7 @@
               "<div>架构 <b>" + h(s.arch || "—") + "</b></div>" +
               "<div>CPU <b>" + h(s.cpu_model || "—") + "</b></div>" +
               "<div>到期 <b>" + h(s.expires_at || "—") + "</b></div>" +
-              "<div>续费 <b>" + h(renewalText(s)) + "</b></div>" +
+              (accessState.logged_in ? ("<div>续费 <b>" + h(renewalText(s)) + "</b></div>") : "") +
             "</div>" +
             '<div class="mobile-sys-grid">' +
               '<div><span>系统</span><b>' + h(compactOS(s.os)) + '</b></div>' +
@@ -3316,7 +3316,7 @@
               '<div class="wide"><span>CPU</span><b>' + h(compactCPU(s.cpu_model)) + '</b></div>' +
               '<div><span>内核</span><b>' + h(compactKernel(s.kernel)) + '</b></div>' +
               '<div><span>到期</span><b>' + h(s.expires_at || "—") + '</b></div>' +
-              '<div><span>续费</span><b>' + h(renewalText(s)) + '</b></div>' +
+              (accessState.logged_in ? ('<div><span>续费</span><b>' + h(renewalText(s)) + '</b></div>') : '') +
               (s.asn ? '<div class="wide"><span>ASN</span><b>' + h(s.asn + (s.asn_org ? " · " + s.asn_org : "")) + '</b></div>' : '') +
             '</div>' +
           "</div>" +
@@ -3966,17 +3966,20 @@
     const avgLoss = lossValues.length ? lossValues.reduce(function (a, b) { return a + b; }, 0) / lossValues.length : null;
     const cacheKey = s.uuid + ":" + range + ":" + (netTarget || "all");
     const cached = seriesGet(cacheKey) || null;
+    const chartOpts = pingChartOpts("xy", { w: 960, h: 200 });
     let chart = '';
     if (!targets.length) {
       chart = '<div class="chart-empty">暂无 Ping Task 数据</div>';
     } else if (netTarget === 'all' && cached && cached.seriesByTask && cached.seriesByTask.length > 1) {
-      chart = ProbeCharts.multiSpark(cached.seriesByTask, { w: 960, h: 200 });
+      chart = ProbeCharts.multiSpark(cached.seriesByTask, chartOpts);
     } else {
-      let vals = cached ? (cached.series || []).map(function (p) { return p.value; }) : [];
+      let vals = cached ? (cached.series || []).map(function (p) {
+        return { v: p && p.value != null && Number.isFinite(Number(p.value)) ? Number(p.value) : -1, t: p && p.t != null ? Number(p.t) : null };
+      }) : [];
       const sparkSrc = chosen || targets[0];
-      if (!vals.length && range === "1h" && sparkSrc && sparkSrc.buckets) vals = sparkSrc.buckets.map(function (b) { return b.ms; });
+      if (!vals.length && range === "1h" && sparkSrc && sparkSrc.buckets) vals = sparkSrc.buckets.map(function (b) { return { v: b.ms, t: b.t }; });
       const sparkIndex = Math.max(0, targets.indexOf(sparkSrc));
-      chart = hasLatencyValues(vals) ? ProbeCharts.spark(vals, { w: 960, h: 200, color: pingColor(sparkSrc, sparkIndex), fillOpacity: 0.11, tips: pingTips(vals, rangeStepMinutes(vals)) }) : '<div class="chart-empty">暂无该时间范围的 Ping 历史</div>';
+      chart = hasLatencyValues(vals) ? ProbeCharts.spark(vals, Object.assign({}, chartOpts, { color: pingColor(sparkSrc, sparkIndex), fillOpacity: 0.11, tips: pingTips(vals, rangeStepMinutes(vals)) })) : '<div class="chart-empty">暂无该时间范围的 Ping 历史</div>';
     }
     if (!chart) chart = '<div class="chart-empty">暂无该时间范围的 Ping 历史</div>';
     main.innerHTML =

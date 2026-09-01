@@ -15,11 +15,20 @@ const startup=s.slice(s.lastIndexOf('render();\n  ProbeAPI.fetchServers()')); if
 if(/data-inline-(?:src|href)=/.test(h)||/(?:src|href)="\.\/(?:app\.(?:js|css)|src\/)/.test(h)||!h.includes('data:image/png;base64,')) throw new Error('not self-contained');
 console.log('flattened Lite-only runtime checks passed');
 NODE
+python3 - <<'PY'
+import os
+p='preview.webp'
+data=open(p,'rb').read(12)
+assert data[:4] == b'RIFF' and data[8:12] == b'WEBP', 'preview is not WebP'
+size=os.path.getsize(p)
+assert 10_000 <= size <= 500_000, f'preview size out of range: {size} bytes'
+print(f'preview guard ok: {size} bytes')
+PY
 ./scripts/package.sh >/dev/null
 python3 - <<'PY'
 import json
 from zipfile import ZipFile
-v=json.load(open('Lite-theme.json'))['version']; n=f'komari-line-grid-v{v}.zip'; req={'Lite-theme.json','preview.svg','dist/index.html'}
+v=json.load(open('Lite-theme.json'))['version']; n=f'komari-line-grid-v{v}.zip'; req={'Lite-theme.json','preview.webp','dist/index.html'}
 with ZipFile(n) as z:
     assert set(z.namelist())==req
     assert f'content="{v}"' in z.read('dist/index.html').decode()

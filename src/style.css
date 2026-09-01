@@ -554,13 +554,11 @@ html[data-theme="light"][data-fx-grain="1"] .fx-grain { opacity: var(--fx-grain-
 }
 
 .status.is-online {
-  color: var(--ink-soft);
-  color: color-mix(in srgb, var(--ink-soft) 78%, var(--live) 22%);
+  color: var(--live);
 }
 
 .status.is-offline {
-  color: var(--ink-soft);
-  color: color-mix(in srgb, var(--ink-soft) 76%, var(--down) 24%);
+  color: var(--down);
 }
 
 .speeds {
@@ -2605,7 +2603,7 @@ body.modal-open { overflow: hidden; }
   font-weight: 400;
   letter-spacing: 0;
 }
-.row > .status.is-offline small { color: color-mix(in srgb, var(--ink-dim) 78%, var(--down) 22%); }
+.row > .status.is-offline small { color: color-mix(in srgb, var(--down) 74%, var(--ink-dim) 26%); }
 .slab-region {
   color: var(--ink-dim);
   font-size: 11px;

@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.5.13
+
+- Fix network latency charts to preserve timestamps, show concrete time/date labels, and keep sparse history in its true position inside 1H / 6H / 24H / 7D windows.
+- Use deep theme-consistent green/red colors for online/offline status on the node overview.
+- Hide renewal price rows from unauthenticated node detail views.
+- Clean the main-branch release history after the v0.5.12 preview staging churn.
+
+## v0.5.12
+
+- Replace the large full-resolution PNG preview with the approved 800×450 WebP theme card.
+- Keep the dashboard screenshot in the foreground and add a dark warm background so the preview matches Lite theme-market cards better.
+- Reduce the preview asset to about 28.3 KB while keeping it comfortably below the 500 KB target.
+- Update README, theme manifest, release packaging and CI checks to use `preview.webp`.
+
+## v0.5.11
+
+- Use the full-resolution local PNG preview instead of the compressed JPEG preview.
+- Keep README, theme manifest and release package on the same `preview.png` asset.
+- Add CI guards so the preview cannot silently regress to a tiny or low-resolution image.
+
+## v0.5.10
+
+- Replace the default theme preview artwork with the new full dashboard screenshot.
+- Add the preview image to README.
+
 ## v0.5.9
 
 - Fix a v0.5.8 startup regression caused by a stale `base` export after removing legacy API-base compatibility.

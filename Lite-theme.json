@@ -2,10 +2,10 @@
   "name": "Line Grid",
   "short": "line-grid",
   "description": "Line Grid for Lite: a responsive infrastructure dashboard using Lite RPC2 and Metric Store, with globe, latency, traffic, resource, billing and anomaly views.",
-  "version": "0.5.9",
+  "version": "0.5.13",
   "author": "line-grid theme contributors / DeterminantMatrix",
   "url": "https://github.com/DeterminantMatrix/Komari-line-grid",
-  "preview": "preview.svg",
+  "preview": "preview.webp",
   "navigation": {
     "server_detail": "/node/{uuid}/overview",
     "server_network": "/network/node/{uuid}/ping",

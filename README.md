@@ -2,6 +2,10 @@
 
 Line Grid 是 [nuomiiiii/Lite](https://github.com/nuomiiiii/Lite) 的第三方主题。v0.5.1 起仅支持 Lite；Komari 兼容版冻结在 `release/v0.4.3`。
 
+## 效果预览
+
+![Line Grid 主题效果图](./preview.webp)
+
 ## 功能
 
 - List / Grid / Column；Overview / Latency / Traffic / System。
@@ -11,7 +15,7 @@ Line Grid 是 [nuomiiiii/Lite](https://github.com/nuomiiiii/Lite) 的第三方�
 
 ## 安装与数据
 
-从 Release 下载 `komari-line-grid-vX.Y.Z.zip` 在 Lite 导入。安装包仅含 `Lite-theme.json`、`preview.svg`、`dist/index.html`。
+从 Release 下载 `komari-line-grid-vX.Y.Z.zip` 在 Lite 导入。安装包仅含 `Lite-theme.json`、`preview.webp`、`dist/index.html`。
 
 节点、状态、账期和历史以 Lite RPC2 / Metric Store 为准，主题不提供后端接口。GeoIP 默认关闭；费用仅登录后显示。
 
