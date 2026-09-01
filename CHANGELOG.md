@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.2
+
+- Make the all-node one-hour Ping overview lossless by disabling the legacy global `maxCount` downsampling that can discard per-node samples in larger fleets.
+- Keep newer live Ping `current_ms` / loss state authoritative when one-hour history arrives later, preventing stale history from replacing fresher live values.
+- Load enough Lite Metric Store traffic history to cover the complete current Shanghai calendar month so the monthly pulse no longer renders earlier dates as false zeros.
+- Use Lite `public:getMe` for browser-user access checks instead of treating every `common:getMe` authenticated principal (including API keys / agents) as an administrator.
+- Add an isolated correctness layer ahead of the planned native Metric/Billing data-layer refactor while preserving the current UI and feature set.
+
 ## v0.6.1
 
 - Give each Ping series a distinct palette color by task order instead of forcing carrier-name colors that could collapse several lines into the same yellow.
