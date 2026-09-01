@@ -1033,16 +1033,85 @@
   }
 
 
-  function fetchServers() {
-    if (!global.LiteAdapt) return Promise.reject(new Error('Lite adapter missing'));
-    return Promise.all([
-      rpc('common:getNodes', {}, 8000),
-      rpc('common:getNodesLatestStatus', {}, 8000).catch(function () { return {}; }),
-      rpc('common:getPublicInfo', {}, 6000).catch(function () { return {}; }),
-    ]).then(function (parts) {
-      lastPayload = LiteAdapt.snapshot(parts[0], parts[1], parts[2]);
-      return lastPayload;
+  function rpcBatch(calls, timeoutMs) {
+    calls = Array.isArray(calls) ? calls : [];
+    if (!calls.length) return Promise.resolve([]);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs || 9000) : null;
+    const requests = calls.map(function (call) {
+      return { jsonrpc: '2.0', id: ++rpcSeq, method: call.method, params: call.params || {} };
     });
+    const order = Object.create(null);
+    requests.forEach(function (request, index) { order[String(request.id)] = index; });
+    return fetch(rpcUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'same-origin',
+      cache: 'no-store',
+      body: JSON.stringify(requests),
+      signal: controller ? controller.signal : undefined,
+    }).then(function (response) {
+      if (!response.ok) throw new Error('RPC batch HTTP ' + response.status);
+      return response.json();
+    }).then(function (json) {
+      if (!Array.isArray(json)) throw new Error('Invalid RPC2 batch response');
+      const slots = new Array(calls.length);
+      json.forEach(function (item) {
+        if (!item || item.jsonrpc !== '2.0') return;
+        const index = order[String(item.id)];
+        if (index == null) return;
+        slots[index] = item.error ? { error: item.error } : { result: item.result };
+      });
+      return calls.map(function (call, index) {
+        const slot = slots[index];
+        if (slot && !slot.error) return slot.result;
+        if (Object.prototype.hasOwnProperty.call(call, 'fallback')) {
+          return typeof call.fallback === 'function' ? call.fallback(slot && slot.error) : call.fallback;
+        }
+        const error = slot && slot.error;
+        throw new Error(((error && error.message) || 'RPC batch item missing') + ' [' + call.method + ']');
+      });
+    }).catch(function (error) {
+      if (error && error.name === 'AbortError') throw new Error('RPC batch timeout');
+      throw error;
+    }).finally(function () {
+      if (timer) clearTimeout(timer);
+    });
+  }
+
+  function fetchBootstrap() {
+    if (!global.LiteAdapt) return Promise.reject(new Error('Lite adapter missing'));
+    const calls = [
+      { method: 'common:getNodes', params: {} },
+      { method: 'common:getNodesLatestStatus', params: {}, fallback: {} },
+      { method: 'common:getPublicInfo', params: {}, fallback: {} },
+      { method: 'public:getMe', params: {}, fallback: { logged_in: false } },
+      { method: 'public:getPublicPingTasks', params: {}, fallback: [] },
+    ];
+    const individualFallback = function () {
+      return Promise.all([
+        rpc('common:getNodes', {}, 8000),
+        rpc('common:getNodesLatestStatus', {}, 8000).catch(function () { return {}; }),
+        rpc('common:getPublicInfo', {}, 6000).catch(function () { return {}; }),
+        rpc('public:getMe', {}, 5000).catch(function () { return { logged_in: false }; }),
+        rpc('public:getPublicPingTasks', {}, 7000).catch(function () { return []; }),
+      ]);
+    };
+    return rpcBatch(calls, 9000).catch(individualFallback).then(function (parts) {
+      lastPayload = LiteAdapt.snapshot(parts[0], parts[1], parts[2]);
+      const me = parts[3] || {};
+      const rawTasks = parts[4];
+      lastPayload._bootstrap_ping_tasks = Array.isArray(rawTasks) ? rawTasks : (rawTasks && Array.isArray(rawTasks.tasks) ? rawTasks.tasks : []);
+      const loggedIn = !!me.logged_in;
+      return {
+        payload: lastPayload,
+        access: { known: true, logged_in: loggedIn, is_admin: loggedIn },
+      };
+    });
+  }
+
+  function fetchServers() {
+    return fetchBootstrap().then(function (result) { return result.payload; });
   }
 
   function fetchPingOverview() {
@@ -1120,7 +1189,7 @@
   }
 
   function fetchAccess() {
-    return rpc('common:getMe', {}, 5000).then(function (me) {
+    return rpc('public:getMe', {}, 5000).then(function (me) {
       const loggedIn = !!(me && me.logged_in);
       return { known: true, logged_in: loggedIn, is_admin: loggedIn };
     }).catch(function () {
@@ -1204,6 +1273,8 @@
 
   global.ProbeAPI = {
     rpc: rpc,
+    rpcBatch: rpcBatch,
+    fetchBootstrap: fetchBootstrap,
     fetchServers: fetchServers,
     fetchPingOverview: fetchPingOverview,
     fetchTrafficHistory: fetchTrafficHistory,
@@ -4580,10 +4651,8 @@
     rebuildPulse();
     if (globeDrag) return;
     const y = window.scrollY;
-    const r = route();
     render();
     window.scrollTo(0, y);
-    if (r.node != null) renderWindow(r.node, r.page);
   }
 
   function loadSeries(index, tgt) {
@@ -4689,31 +4758,44 @@
     requestAnimationFrame(frame);
   })();
 
-  render();
-  ProbeAPI.fetchServers().then(function (payload) {
+  function boot() {
+    render();
+    const bootstrap = ProbeAPI.fetchBootstrap ? ProbeAPI.fetchBootstrap() : ProbeAPI.fetchServers().then(function (payload) {
+      const accessUuid = payload && payload.servers && payload.servers[0] && payload.servers[0].uuid;
+      return ProbeAPI.fetchAccess(accessUuid).catch(function () {
+        return { known: true, logged_in: false, is_admin: false };
+      }).then(function (access) { return { payload: payload, access: access }; });
+    });
+    bootstrap.then(function (result) {
+      const payload = result && result.payload ? result.payload : result;
       if (!payload || payload.enabled === false) return;
+      if (result && result.access) accessState = result.access;
       applyLive(payload);
-      const accessUuid = payload.servers && payload.servers[0] && payload.servers[0].uuid;
-      ProbeAPI.fetchAccess(accessUuid).then(function (nextAccess) {
-        accessState = nextAccess || accessState;
-        const y = window.scrollY;
-        render();
-        window.scrollTo(0, y);
-        if (ProbeAPI.enrich) {
-          return ProbeAPI.enrich(payload, { loadFx: accessState.logged_in === true }).then(function (next) {
-            if (next) applyLive(next, { kind: 'enrichment' });
-          });
-        }
-        return null;
-      }).catch(function () {});
       ProbeAPI.connectWS(applyLive);
-      Promise.allSettled([
-        ProbeAPI.fetchPingOverview().then(function (next) { if (next) applyLive(next); }),
-        ProbeAPI.fetchTrafficHistory().then(function (next) { if (next) applyLive(next); }),
-      ]);
+
+      let hydrationPayload = payload;
+      const hydrationTasks = [];
+      if (ProbeAPI.enrich) {
+        hydrationTasks.push(ProbeAPI.enrich(payload, { loadFx: accessState.logged_in === true }).then(function (next) {
+          if (next) hydrationPayload = next;
+        }));
+      }
+      hydrationTasks.push(ProbeAPI.fetchPingOverview().then(function (next) {
+        if (next) hydrationPayload = next;
+      }));
+      hydrationTasks.push(ProbeAPI.fetchTrafficHistory().then(function (next) {
+        if (next) hydrationPayload = next;
+      }));
+      Promise.allSettled(hydrationTasks).then(function () {
+        if (hydrationPayload && hydrationPayload.enabled !== false) applyLive(hydrationPayload, { kind: 'hydration' });
+      });
     }).catch(function (err) {
       state = { enabled: true, title: "节点状态", servers: [], _loading: false, _error: err && err.message ? err.message : String(err), _source: "lite-rpc2" };
       liveMode = false;
       render();
     });
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
+  else setTimeout(boot, 0);
 })();

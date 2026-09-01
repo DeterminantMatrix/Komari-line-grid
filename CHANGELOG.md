@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6.4
+
+- Batch the initial Lite bootstrap RPCs (`getNodes`, latest status, public info, browser login state, and Ping task definitions) into one `/api/rpc2` request, with an individual-RPC compatibility fallback.
+- Batch the paired Ping Metric Store queries and multi-page Billing fetches where possible, while keeping the existing native/legacy fallbacks.
+- Merge startup rendering: render once after bootstrap/access is known, hydrate GeoIP/Billing/Ping/Traffic concurrently, then commit one full hydration render instead of rendering after each response.
+- Defer boot until `DOMContentLoaded` so the native-data adapter is installed before the first network request; remove the duplicate node-detail render from the full-render path.
+- Move the primary Ping data path to Lite's native Metric Store interfaces: `public:getPingMetricStats`, `public:queryMetrics`, and `public:getPublicPingTasks`, while retaining the legacy record query only as a compatibility fallback.
+- Keep two-second live status polling on `common:getNodesLatestStatus` compact mode and refresh Ping statistics from Metric Store once per minute instead of invoking the legacy Ping aggregation path.
+- Move node Ping history for 1H / 6H / 24H / 7D charts to `ping.latency_ms` Metric Store queries while preserving Lite backend task order, true timestamps, sparse windows, and the existing UI.
+- Move System CPU / RAM / Disk history to `cpu.usage`, `memory.used`, and `disk.used` via `public:queryMetrics`; fall back to the legacy load-record response only when native history is unavailable.
+- Prefer `admin:getBillingServers` for logged-in finance conversion data and use external FX only for currencies missing from Lite Billing or when Billing is unavailable.
+- Fold the v0.6.2 data-correctness guards into the native data adapter, including natural-month traffic coverage, browser-user `public:getMe`, and live-over-history Ping precedence; remove the temporary standalone correctness layer.
+- Preserve all existing views, filters, charts, GeoIP controls, finance displays, and legacy fallbacks while reducing unnecessary legacy data reconstruction.
+
 ## v0.6.2
 
 - Make the all-node one-hour Ping overview lossless by disabling the legacy global `maxCount` downsampling that can discard per-node samples in larger fleets.
@@ -72,4 +86,4 @@
 
 ## v0.4.3
 
-- Add billing time-zone handling, reproducible builds, CI packaging, exchange-rate gating, and selectable GeoIP. Historical Komari line is frozen at `release/v0.4.3`.
+- Add billing time-zone handling, reproducible builds, CI packaging, and selectable GeoIP. Historical Komari line is frozen at `release/v0.4.3`.

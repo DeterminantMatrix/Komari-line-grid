@@ -1,26 +1,49 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
-node --check src/app.js; node --check src/correctness.js; node --check scripts/build-release.js; node scripts/test-runtime-init.js; node scripts/build-release.js >/dev/null; node scripts/build-release.js --check >/dev/null
+node --check src/app.js; node --check src/native-data.js; node --check scripts/build-release.js; node scripts/test-runtime-init.js; node scripts/test-rpc-batch.js; node scripts/build-release.js >/dev/null; node scripts/build-release.js --check >/dev/null
 node - <<'NODE'
-const fs=require('fs'), m=JSON.parse(fs.readFileSync('Lite-theme.json','utf8')), s=fs.readFileSync('src/app.js','utf8'), k=fs.readFileSync('src/correctness.js','utf8'), c=fs.readFileSync('src/style.css','utf8'), h=fs.readFileSync('dist/index.html','utf8');
+const fs=require('fs'), m=JSON.parse(fs.readFileSync('Lite-theme.json','utf8')), s=fs.readFileSync('src/app.js','utf8'), n=fs.readFileSync('src/native-data.js','utf8'), c=fs.readFileSync('src/style.css','utf8'), h=fs.readFileSync('dist/index.html','utf8');
 if(!/^\d+\.\d+\.\d+$/.test(m.version)||!h.includes(`name="line-grid-version" content="${m.version}"`)) throw new Error('version mismatch');
 for(const p of ['dist/js','dist/css','dist/img','dist/metadata']) if(fs.existsSync(p)) throw new Error('legacy tree '+p);
+if(fs.existsSync('src/correctness.js')) throw new Error('temporary correctness layer still present');
 for(const t of ['ProbeConfig','LINE_GRID_METADATA','loadMetadata(','metadataFor(','query.get(\'api\')','ProbeDemo']) if(s.includes(t)) throw new Error('legacy '+t);
 if(!s.includes("function rpcUrl() {\n    return '/api/rpc2';")) throw new Error('RPC2 path');
+if(!s.includes('function rpcBatch(calls, timeoutMs)')||!s.includes('fetchBootstrap: fetchBootstrap')) throw new Error('RPC batch API missing');
+if(!n.includes('function runBatch(calls, timeoutMs)')||!n.includes('originalRpcBatch')) throw new Error('native RPC batch reuse missing');
 const ap=[...s.matchAll(/[\"'](\/api\/[^\"']+)/g)].map(x=>x[1]); if(ap.some(x=>x!='/api/rpc2')) throw new Error('unexpected API');
-for(const t of ['common:getNodes','common:getNodesLatestStatus','common:getPublicInfo','common:getRecords','public:queryMetrics','common:getMe','const SYSTEM_HISTORY_TTL_MS = 90000','Date.now() - cached.at < SYSTEM_HISTORY_TTL_MS','globe-selected-ring','globe-selected-core','if (globePinned) return;']) if(!(s+c).includes(t)) throw new Error('missing '+t);
-for(const t of ["maxCount: -1", "public:getMe", "originalMergePingHistory", "shanghaiDayOfMonth", "originalFetchTrafficHistory.call(this, elapsedHours)"]) if(!k.includes(t)) throw new Error('missing correctness guard '+t);
-if(!h.includes("maxCount: -1")||!h.includes("public:getMe")||!h.includes("originalMergePingHistory")) throw new Error('correctness layer not inlined');
+for(const t of ['common:getNodes','common:getNodesLatestStatus','common:getPublicInfo','common:getRecords','public:queryMetrics','const SYSTEM_HISTORY_TTL_MS = 90000','Date.now() - cached.at < SYSTEM_HISTORY_TTL_MS','globe-selected-ring','globe-selected-core','if (globePinned) return;']) if(!(s+c).includes(t)) throw new Error('missing '+t);
+for(const t of [
+  "public:getMe",
+  "public:getPublicPingTasks",
+  "public:getPingMetricStats",
+  "'ping.latency_ms'",
+  "'ping.loss'",
+  "'cpu.usage'",
+  "'memory.used'",
+  "'disk.used'",
+  "admin:getBillingServers",
+  "maxCount: -1",
+  "originalMergePingHistory",
+  "shanghaiDayOfMonth",
+  "common:getNodesLatestStatus', { compact: true }",
+  "version: '0.6.4'"
+]) if(!n.includes(t)) throw new Error('missing native data guard '+t);
+if(!n.includes("return originalFetchSeries.call(api, uuid, range, target);")) throw new Error('native Ping fallback arguments');
+if(n.includes('liveAt > metricAt') || n.includes('keepNewerLive')) throw new Error('node status timestamp must not gate Metric Store Ping refresh');
+if(!n.includes('Metric Store is the primary Ping source here.')) throw new Error('native Ping authority guard missing');
+if(!n.includes("payload._billing_source = 'lite-native'")) throw new Error('Lite Billing source missing');
+for(const t of ['public:getPingMetricStats','public:getPublicPingTasks','cpu.usage','admin:getBillingServers','LineGridNativeData']) if(!h.includes(t)) throw new Error('native data layer not inlined: '+t);
+if(h.includes('correctness.js')) throw new Error('stale correctness script in release');
 if(/<link[^>]+fonts\.(?:googleapis|gstatic)\.com/i.test(h)||!s.includes('https://fonts.googleapis.com/css2?family=')||!c.includes('html[data-font-mode="system"]')) throw new Error('font mode');
-const startup=s.slice(s.lastIndexOf('render();\n  ProbeAPI.fetchServers()')); if(!startup.includes('ProbeAPI.fetchServers()')||startup.includes('loadSystemHistory(')) throw new Error('history not lazy');
-if(/data-inline-(?:src|href)=/.test(h)||/(?:src|href)="\.\/(?:app\.(?:js|css)|correctness\.js|src\/)/.test(h)||!h.includes('data:image/png;base64,')) throw new Error('not self-contained');
+const startup=s.slice(s.lastIndexOf('function boot()')); if(!startup.includes('ProbeAPI.fetchBootstrap')||!startup.includes('Promise.allSettled(hydrationTasks)')||!startup.includes('DOMContentLoaded')||startup.includes('loadSystemHistory(')) throw new Error('batched lazy startup missing');
+if(/data-inline-(?:src|href)=/.test(h)||/(?:src|href)="\.\/(?:app\.(?:js|css)|native-data\.js|src\/)/.test(h)||!h.includes('data:image/png;base64,')) throw new Error('not self-contained');
 if(/电信\|telecom|移动\|mobile|联通\|unicom/.test(s.slice(s.indexOf('function multiSpark'), s.indexOf('function ruler', s.indexOf('function multiSpark')) > -1 ? s.indexOf('function ruler', s.indexOf('function multiSpark')) : s.length))) throw new Error('ping color tied to provider label');
 if(!s.includes("const palette = ['#e2ad45', '#58a6ff', '#e06c75', '#65c18c', '#b48ead', '#d08770'];")) throw new Error('multi-series palette');
 if(!s.includes('const palette = ["#e2ad45", "#58a6ff", "#e06c75", "#65c18c", "#b48ead", "#d08770"];')) throw new Error('single-series palette');
 if(!s.includes('if (key === "latency") { const v = pingMs(server); return v == null ? null : v; }')) throw new Error('latency null sentinel');
 if(!s.includes('return aMissing ? 1 : -1;')) throw new Error('latency missing-last sort');
-console.log('flattened Lite-only runtime checks passed');
+console.log('Lite-native runtime checks passed');
 NODE
 python3 - <<'PY'
 import os
@@ -38,7 +61,9 @@ from zipfile import ZipFile
 v=json.load(open('Lite-theme.json'))['version']; n=f'komari-line-grid-v{v}.zip'; req={'Lite-theme.json','preview.webp','dist/index.html'}
 with ZipFile(n) as z:
     assert set(z.namelist())==req
-    assert f'content="{v}"' in z.read('dist/index.html').decode()
+    html=z.read('dist/index.html').decode()
+    assert f'content="{v}"' in html
+    assert 'LineGridNativeData' in html
 print('minimal release package ok')
 PY
 echo 'all checks passed'

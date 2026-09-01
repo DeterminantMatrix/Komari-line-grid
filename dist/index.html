@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Line Grid</title>
   <meta name="description" content="Line Grid server monitoring theme for Lite.">
-  <meta name="line-grid-version" content="0.6.2">
+  <meta name="line-grid-version" content="0.6.4">
   <script>
     (function () {
       var t = localStorage.getItem("mmwx-theme") === "light" ? "light" : "dark";
@@ -3972,16 +3972,85 @@ html[data-font-mode="system"] {
   }
 
 
-  function fetchServers() {
-    if (!global.LiteAdapt) return Promise.reject(new Error('Lite adapter missing'));
-    return Promise.all([
-      rpc('common:getNodes', {}, 8000),
-      rpc('common:getNodesLatestStatus', {}, 8000).catch(function () { return {}; }),
-      rpc('common:getPublicInfo', {}, 6000).catch(function () { return {}; }),
-    ]).then(function (parts) {
-      lastPayload = LiteAdapt.snapshot(parts[0], parts[1], parts[2]);
-      return lastPayload;
+  function rpcBatch(calls, timeoutMs) {
+    calls = Array.isArray(calls) ? calls : [];
+    if (!calls.length) return Promise.resolve([]);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs || 9000) : null;
+    const requests = calls.map(function (call) {
+      return { jsonrpc: '2.0', id: ++rpcSeq, method: call.method, params: call.params || {} };
     });
+    const order = Object.create(null);
+    requests.forEach(function (request, index) { order[String(request.id)] = index; });
+    return fetch(rpcUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'same-origin',
+      cache: 'no-store',
+      body: JSON.stringify(requests),
+      signal: controller ? controller.signal : undefined,
+    }).then(function (response) {
+      if (!response.ok) throw new Error('RPC batch HTTP ' + response.status);
+      return response.json();
+    }).then(function (json) {
+      if (!Array.isArray(json)) throw new Error('Invalid RPC2 batch response');
+      const slots = new Array(calls.length);
+      json.forEach(function (item) {
+        if (!item || item.jsonrpc !== '2.0') return;
+        const index = order[String(item.id)];
+        if (index == null) return;
+        slots[index] = item.error ? { error: item.error } : { result: item.result };
+      });
+      return calls.map(function (call, index) {
+        const slot = slots[index];
+        if (slot && !slot.error) return slot.result;
+        if (Object.prototype.hasOwnProperty.call(call, 'fallback')) {
+          return typeof call.fallback === 'function' ? call.fallback(slot && slot.error) : call.fallback;
+        }
+        const error = slot && slot.error;
+        throw new Error(((error && error.message) || 'RPC batch item missing') + ' [' + call.method + ']');
+      });
+    }).catch(function (error) {
+      if (error && error.name === 'AbortError') throw new Error('RPC batch timeout');
+      throw error;
+    }).finally(function () {
+      if (timer) clearTimeout(timer);
+    });
+  }
+
+  function fetchBootstrap() {
+    if (!global.LiteAdapt) return Promise.reject(new Error('Lite adapter missing'));
+    const calls = [
+      { method: 'common:getNodes', params: {} },
+      { method: 'common:getNodesLatestStatus', params: {}, fallback: {} },
+      { method: 'common:getPublicInfo', params: {}, fallback: {} },
+      { method: 'public:getMe', params: {}, fallback: { logged_in: false } },
+      { method: 'public:getPublicPingTasks', params: {}, fallback: [] },
+    ];
+    const individualFallback = function () {
+      return Promise.all([
+        rpc('common:getNodes', {}, 8000),
+        rpc('common:getNodesLatestStatus', {}, 8000).catch(function () { return {}; }),
+        rpc('common:getPublicInfo', {}, 6000).catch(function () { return {}; }),
+        rpc('public:getMe', {}, 5000).catch(function () { return { logged_in: false }; }),
+        rpc('public:getPublicPingTasks', {}, 7000).catch(function () { return []; }),
+      ]);
+    };
+    return rpcBatch(calls, 9000).catch(individualFallback).then(function (parts) {
+      lastPayload = LiteAdapt.snapshot(parts[0], parts[1], parts[2]);
+      const me = parts[3] || {};
+      const rawTasks = parts[4];
+      lastPayload._bootstrap_ping_tasks = Array.isArray(rawTasks) ? rawTasks : (rawTasks && Array.isArray(rawTasks.tasks) ? rawTasks.tasks : []);
+      const loggedIn = !!me.logged_in;
+      return {
+        payload: lastPayload,
+        access: { known: true, logged_in: loggedIn, is_admin: loggedIn },
+      };
+    });
+  }
+
+  function fetchServers() {
+    return fetchBootstrap().then(function (result) { return result.payload; });
   }
 
   function fetchPingOverview() {
@@ -4059,7 +4128,7 @@ html[data-font-mode="system"] {
   }
 
   function fetchAccess() {
-    return rpc('common:getMe', {}, 5000).then(function (me) {
+    return rpc('public:getMe', {}, 5000).then(function (me) {
       const loggedIn = !!(me && me.logged_in);
       return { known: true, logged_in: loggedIn, is_admin: loggedIn };
     }).catch(function () {
@@ -4143,6 +4212,8 @@ html[data-font-mode="system"] {
 
   global.ProbeAPI = {
     rpc: rpc,
+    rpcBatch: rpcBatch,
+    fetchBootstrap: fetchBootstrap,
     fetchServers: fetchServers,
     fetchPingOverview: fetchPingOverview,
     fetchTrafficHistory: fetchTrafficHistory,
@@ -7519,10 +7590,8 @@ html[data-font-mode="system"] {
     rebuildPulse();
     if (globeDrag) return;
     const y = window.scrollY;
-    const r = route();
     render();
     window.scrollTo(0, y);
-    if (r.node != null) renderWindow(r.node, r.page);
   }
 
   function loadSeries(index, tgt) {
@@ -7628,33 +7697,46 @@ html[data-font-mode="system"] {
     requestAnimationFrame(frame);
   })();
 
-  render();
-  ProbeAPI.fetchServers().then(function (payload) {
+  function boot() {
+    render();
+    const bootstrap = ProbeAPI.fetchBootstrap ? ProbeAPI.fetchBootstrap() : ProbeAPI.fetchServers().then(function (payload) {
+      const accessUuid = payload && payload.servers && payload.servers[0] && payload.servers[0].uuid;
+      return ProbeAPI.fetchAccess(accessUuid).catch(function () {
+        return { known: true, logged_in: false, is_admin: false };
+      }).then(function (access) { return { payload: payload, access: access }; });
+    });
+    bootstrap.then(function (result) {
+      const payload = result && result.payload ? result.payload : result;
       if (!payload || payload.enabled === false) return;
+      if (result && result.access) accessState = result.access;
       applyLive(payload);
-      const accessUuid = payload.servers && payload.servers[0] && payload.servers[0].uuid;
-      ProbeAPI.fetchAccess(accessUuid).then(function (nextAccess) {
-        accessState = nextAccess || accessState;
-        const y = window.scrollY;
-        render();
-        window.scrollTo(0, y);
-        if (ProbeAPI.enrich) {
-          return ProbeAPI.enrich(payload, { loadFx: accessState.logged_in === true }).then(function (next) {
-            if (next) applyLive(next, { kind: 'enrichment' });
-          });
-        }
-        return null;
-      }).catch(function () {});
       ProbeAPI.connectWS(applyLive);
-      Promise.allSettled([
-        ProbeAPI.fetchPingOverview().then(function (next) { if (next) applyLive(next); }),
-        ProbeAPI.fetchTrafficHistory().then(function (next) { if (next) applyLive(next); }),
-      ]);
+
+      let hydrationPayload = payload;
+      const hydrationTasks = [];
+      if (ProbeAPI.enrich) {
+        hydrationTasks.push(ProbeAPI.enrich(payload, { loadFx: accessState.logged_in === true }).then(function (next) {
+          if (next) hydrationPayload = next;
+        }));
+      }
+      hydrationTasks.push(ProbeAPI.fetchPingOverview().then(function (next) {
+        if (next) hydrationPayload = next;
+      }));
+      hydrationTasks.push(ProbeAPI.fetchTrafficHistory().then(function (next) {
+        if (next) hydrationPayload = next;
+      }));
+      Promise.allSettled(hydrationTasks).then(function () {
+        if (hydrationPayload && hydrationPayload.enabled !== false) applyLive(hydrationPayload, { kind: 'hydration' });
+      });
     }).catch(function (err) {
       state = { enabled: true, title: "节点状态", servers: [], _loading: false, _error: err && err.message ? err.message : String(err), _source: "lite-rpc2" };
       liveMode = false;
       render();
     });
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
+  else setTimeout(boot, 0);
 })();
 
 </script>
@@ -7664,80 +7746,61 @@ html[data-font-mode="system"] {
 
   if (!global.ProbeAPI || !global.LiteAdapt) return;
 
-  // v0.6.2 correctness layer. Keep the current UI intact while correcting
-  // four data-ownership / query-window issues before the broader native-data
-  // refactor planned for v0.7.x.
+  const api = global.ProbeAPI;
+  const adapt = global.LiteAdapt;
+  const originalRpc = api.rpc;
+  const originalRpcBatch = api.rpcBatch;
+  const originalFetchSeries = api.fetchSeries;
+  const originalFetchTrafficHistory = api.fetchTrafficHistory;
+  const originalEnrich = api.enrich;
+  const originalSnapshot = adapt.snapshot;
+  const originalMergeLatest = adapt.mergeLatest;
+  const originalMergePingHistory = adapt.mergePingHistory;
 
-  function shanghaiDayOfMonth(nowValue) {
-    const date = nowValue instanceof Date ? nowValue : new Date(nowValue == null ? Date.now() : nowValue);
-    const shifted = new Date(date.getTime() + 8 * 3600000);
-    return shifted.getUTCDate();
+  const TASK_TTL_MS = 60000;
+  let taskCache = { at: 0, items: null, inflight: null };
+  let lastPayload = null;
+
+  function numberOrNull(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
   }
 
-  // 1) The all-node 1h Ping overview must not use common:getRecords' global
-  // maxCount downsampling. That sampler groups by task ID, so a large fleet can
-  // lose per-node samples before the browser computes node statistics.
-  // Keep the same Lite-native RPC contract for this correctness-only release,
-  // but request the complete one-hour window. The next data-layer refactor will
-  // move this summary to public:getPingMetricStats / public:queryMetrics.
-  global.ProbeAPI.fetchPingOverview = function () {
-    return global.ProbeAPI.rpc('common:getRecords', {
-      type: 'ping',
-      uuid: '',
-      hours: 1,
-      task_id: -1,
-      maxCount: -1,
-    }, 18000).then(function (raw) {
-      global.LiteAdapt.mergePingHistory(global.__lineGridLastPayload || null, raw);
-      return global.__lineGridLastPayload || null;
-    }).catch(function () {
-      const payload = global.__lineGridLastPayload;
-      if (payload) payload._ping_history_status = 'unavailable';
-      return payload || null;
-    });
+  function currentPayload() {
+    return lastPayload || global.__lineGridLastPayload || null;
+  }
+
+  function rememberPayload(payload) {
+    if (!payload) return payload;
+    lastPayload = payload;
+    global.__lineGridLastPayload = payload;
+    return payload;
+  }
+
+  adapt.snapshot = function () {
+    return rememberPayload(originalSnapshot.apply(this, arguments));
   };
 
-  // ProbeAPI keeps its canonical payload private. Capture the object identity
-  // at the two public merge boundaries so the overview override above can keep
-  // using the same object without creating a parallel state tree.
-  const originalMergeLatest = global.LiteAdapt.mergeLatest;
-  global.LiteAdapt.mergeLatest = function (payload, raw) {
-    if (payload) global.__lineGridLastPayload = payload;
+  adapt.mergeLatest = function (payload) {
+    rememberPayload(payload);
     return originalMergeLatest.apply(this, arguments);
   };
 
-  const originalSnapshot = global.LiteAdapt.snapshot;
-  global.LiteAdapt.snapshot = function () {
-    const payload = originalSnapshot.apply(this, arguments);
-    if (payload) global.__lineGridLastPayload = payload;
-    return payload;
-  };
-
-  // 2) Historical Ping data owns history/statistics, but it must not replace a
-  // newer live current_ms value. Preserve live current/is_loss whenever the
-  // latest live report timestamp is newer than the newest history bucket.
-  const originalMergePingHistory = global.LiteAdapt.mergePingHistory;
-  global.LiteAdapt.mergePingHistory = function (payload, raw) {
+  // Legacy history is fallback-only from v0.6.4 onward. If it is used, keep
+  // live current/loss values newer than the returned history authoritative.
+  adapt.mergePingHistory = function (payload, raw) {
     const liveByServer = Object.create(null);
     if (payload && Array.isArray(payload.servers)) {
       payload.servers.forEach(function (server) {
         const ping = Object.create(null);
         (server.ping || []).forEach(function (item) {
-          ping[String(item.key)] = {
-            current_ms: item.current_ms,
-            is_loss: item.is_loss,
-          };
+          ping[String(item.key)] = { current_ms: item.current_ms, is_loss: item.is_loss };
         });
-        liveByServer[String(server.uuid)] = {
-          at: Number(server.last_seen_at) || 0,
-          ping: ping,
-        };
+        liveByServer[String(server.uuid)] = { at: Number(server.last_seen_at) || 0, ping: ping };
       });
     }
-
     const result = originalMergePingHistory.apply(this, arguments);
     if (!payload || !Array.isArray(payload.servers)) return result;
-
     payload.servers.forEach(function (server) {
       const live = liveByServer[String(server.uuid)];
       if (!live || !live.at) return;
@@ -7754,27 +7817,455 @@ html[data-font-mode="system"] {
     return result;
   };
 
-  // 3) The month pulse is a natural-month chart. The previous default traffic
-  // query was clamped to seven days, so dates earlier in the month became fake
-  // zeros. Ask the existing Metric Store query for at least the elapsed days in
-  // the current Shanghai calendar month. The 7-day widgets continue to slice
-  // the same returned daily series.
-  const originalFetchTrafficHistory = global.ProbeAPI.fetchTrafficHistory;
-  global.ProbeAPI.fetchTrafficHistory = function (hours) {
+  function shanghaiDayOfMonth(nowValue) {
+    const date = nowValue instanceof Date ? nowValue : new Date(nowValue == null ? Date.now() : nowValue);
+    return new Date(date.getTime() + 8 * 3600000).getUTCDate();
+  }
+
+  api.fetchTrafficHistory = function (hours) {
     if (hours != null && Number(hours) > 0) return originalFetchTrafficHistory.apply(this, arguments);
-    const elapsedHours = shanghaiDayOfMonth() * 24;
-    return originalFetchTrafficHistory.call(this, elapsedHours);
+    return originalFetchTrafficHistory.call(this, shanghaiDayOfMonth() * 24);
   };
 
-  // 4) common:getMe also treats API keys / agents as logged in. UI visibility
-  // needs the guest-aware browser-user semantics of Lite's public:getMe.
-  global.ProbeAPI.fetchAccess = function () {
-    return global.ProbeAPI.rpc('public:getMe', {}, 5000).then(function (me) {
+  api.fetchAccess = function () {
+    return originalRpc('public:getMe', {}, 5000).then(function (me) {
       const loggedIn = !!(me && me.logged_in);
       return { known: true, logged_in: loggedIn, is_admin: loggedIn };
     }).catch(function () {
       return { known: true, logged_in: false, is_admin: false };
     });
+  };
+
+  function runBatch(calls, timeoutMs) {
+    const individual = function () {
+      return Promise.all(calls.map(function (call) { return originalRpc(call.method, call.params || {}, timeoutMs); }));
+    };
+    if (typeof originalRpcBatch !== 'function') return individual();
+    return originalRpcBatch(calls, timeoutMs).catch(individual);
+  }
+
+  function loadPingTasks(force) {
+    const seeded = currentPayload() && currentPayload()._bootstrap_ping_tasks;
+    if (!force && !taskCache.items && Array.isArray(seeded)) taskCache = { at: Date.now(), items: seeded, inflight: null };
+    if (!force && taskCache.items && Date.now() - taskCache.at < TASK_TTL_MS) return Promise.resolve(taskCache.items);
+    if (taskCache.inflight) return taskCache.inflight;
+    taskCache.inflight = originalRpc('public:getPublicPingTasks', {}, 8000).then(function (raw) {
+      const items = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.tasks) ? raw.tasks : []);
+      taskCache = { at: Date.now(), items: items, inflight: null };
+      return items;
+    }).catch(function (error) {
+      taskCache.inflight = null;
+      throw error;
+    });
+    return taskCache.inflight;
+  }
+
+  function taskIdFromSeries(series) {
+    if (!series) return '';
+    const tags = series.tags || {};
+    if (tags.task_id != null && String(tags.task_id)) return String(tags.task_id);
+    const points = Array.isArray(series.points) ? series.points : [];
+    for (let i = 0; i < points.length; i += 1) {
+      const pointTags = points[i] && points[i].tags || {};
+      if (pointTags.task_id != null && String(pointTags.task_id)) return String(pointTags.task_id);
+    }
+    return '';
+  }
+
+  function metricPoints(series) {
+    return (series && Array.isArray(series.points) ? series.points : []).map(function (point) {
+      const t = Date.parse(point && point.time || '');
+      const v = point && point.value != null ? Number(point.value) : null;
+      return { t: Number.isFinite(t) ? t : null, value: Number.isFinite(v) ? v : -1 };
+    }).filter(function (point) { return point.t != null; });
+  }
+
+  function indexMetricSeries(raw, metricKey) {
+    const out = Object.create(null);
+    const list = raw && Array.isArray(raw.series) ? raw.series : [];
+    list.forEach(function (series) {
+      if (metricKey && String(series.metric_key || '') !== metricKey) return;
+      const entity = String(series.entity_id || '');
+      const task = taskIdFromSeries(series);
+      if (!entity || !task) return;
+      if (!out[entity]) out[entity] = Object.create(null);
+      out[entity][task] = series;
+    });
+    return out;
+  }
+
+  function lastMetricPoint(series) {
+    const points = metricPoints(series);
+    return points.length ? points[points.length - 1] : null;
+  }
+
+  function mergeNativePingOverview(payload, tasks, statsRaw, metricsRaw) {
+    if (!payload || !Array.isArray(payload.servers)) return payload;
+    const statsByEntity = Object.create(null);
+    (statsRaw && Array.isArray(statsRaw.stats) ? statsRaw.stats : []).forEach(function (stat) {
+      const entity = String(stat.entity_id || '');
+      const task = String(stat.task_id || '');
+      if (!entity || !task) return;
+      if (!statsByEntity[entity]) statsByEntity[entity] = Object.create(null);
+      statsByEntity[entity][task] = stat;
+    });
+    const latencyByEntity = indexMetricSeries(metricsRaw, 'ping.latency_ms');
+    const lossByEntity = indexMetricSeries(metricsRaw, 'ping.loss');
+    const taskById = Object.create(null);
+    (tasks || []).forEach(function (task) { if (task && task.id != null) taskById[String(task.id)] = task; });
+
+    let any = false;
+    payload.servers.forEach(function (server) {
+      const uuid = String(server.uuid || '');
+      const prior = Object.create(null);
+      (server.ping || []).forEach(function (item) { if (item && item.key != null) prior[String(item.key)] = item; });
+      const stats = statsByEntity[uuid] || Object.create(null);
+      const latency = latencyByEntity[uuid] || Object.create(null);
+      const loss = lossByEntity[uuid] || Object.create(null);
+      const ids = [];
+      const seen = Object.create(null);
+      (tasks || []).forEach(function (task) {
+        const id = String(task && task.id != null ? task.id : '');
+        if (!id || seen[id] || (!stats[id] && !latency[id] && !loss[id] && !prior[id])) return;
+        seen[id] = true;
+        ids.push(id);
+      });
+      Object.keys(prior).forEach(function (id) { if (!seen[id]) { seen[id] = true; ids.push(id); } });
+      Object.keys(stats).forEach(function (id) { if (!seen[id]) { seen[id] = true; ids.push(id); } });
+
+      server.ping = ids.map(function (id) {
+        const p = prior[id] || {};
+        const stat = stats[id] || {};
+        const latencySeries = latency[id];
+        const lossSeries = loss[id];
+        const buckets = metricPoints(latencySeries).slice(-24).map(function (point) { return { t: point.t, ms: point.value }; });
+        const lastLatency = lastMetricPoint(latencySeries);
+        const lastLoss = lastMetricPoint(lossSeries);
+        const lossNow = lastLoss && lastLoss.value >= 0 ? lastLoss.value > 0 : null;
+        let current = null;
+        let isLoss = false;
+        // Metric Store is the primary Ping source here. compact latest-status
+        // polling deliberately carries no Ping, so node report timestamps must
+        // never prevent a newer metric sample from replacing a prior Ping value.
+        if (lossNow === true) {
+          isLoss = true;
+        } else if (lastLatency && lastLatency.value >= 0) {
+          current = Math.round(lastLatency.value);
+        } else if (numberOrNull(stat.latest) != null && Number(stat.latest) >= 0) {
+          current = Math.round(Number(stat.latest));
+        } else if (p.current_ms != null) {
+          current = Number(p.current_ms);
+          isLoss = !!p.is_loss;
+        }
+        if (stat.task_id != null || latencySeries || lossSeries) any = true;
+        return {
+          key: id,
+          label: String(stat.name || (taskById[id] && taskById[id].name) || p.label || ('Ping ' + id)),
+          current_ms: current,
+          is_loss: isLoss,
+          loss_pct: numberOrNull(stat.loss) != null ? Number(stat.loss) : (numberOrNull(p.loss_pct) || 0),
+          avg_ms: numberOrNull(stat.avg),
+          min_ms: numberOrNull(stat.min),
+          max_ms: numberOrNull(stat.max),
+          p50_ms: numberOrNull(stat.p50),
+          p99_ms: numberOrNull(stat.p99),
+          buckets: buckets.length ? buckets : (p.buckets || []),
+        };
+      });
+    });
+    payload._ping_history_status = any ? 'ok' : 'unavailable';
+    payload._ping_source = any ? 'metric-store' : payload._ping_source;
+    return payload;
+  }
+
+  function legacyPingOverview() {
+    const payload = currentPayload();
+    if (!payload) return Promise.resolve(null);
+    return originalRpc('common:getRecords', { type: 'ping', uuid: '', hours: 1, task_id: -1, maxCount: -1 }, 18000)
+      .then(function (raw) { adapt.mergePingHistory(payload, raw); return payload; })
+      .catch(function () { payload._ping_history_status = 'unavailable'; return payload; });
+  }
+
+  api.fetchPingOverview = function () {
+    const payload = currentPayload();
+    if (!payload) return Promise.resolve(null);
+    const entityIds = (payload.servers || []).map(function (server) { return String(server.uuid || ''); }).filter(Boolean);
+    if (!entityIds.length) return Promise.resolve(payload);
+    return loadPingTasks(false).then(function (tasks) {
+      return runBatch([
+        { method: 'public:getPingMetricStats', params: { entity_ids: entityIds, hours: 1, max_points: 120 } },
+        { method: 'public:queryMetrics', params: {
+          metric_keys: ['ping.latency_ms', 'ping.loss'],
+          entity_ids: entityIds,
+          hours: 1,
+          fill_empty: true,
+          max_points: 24,
+          aggregation_by_metric: { 'ping.latency_ms': 'last', 'ping.loss': 'last' },
+        } },
+      ], 18000).then(function (parts) { return mergeNativePingOverview(payload, tasks, parts[0], parts[1]); });
+    }).catch(function () { return legacyPingOverview(); });
+  };
+
+  function rangeHours(range) {
+    const value = String(range || '1h').toLowerCase();
+    if (value === '7d') return 168;
+    if (value === '24h') return 24;
+    if (value === '6h') return 6;
+    return 1;
+  }
+
+  function rangePoints(hours) {
+    if (hours >= 168) return 672;
+    if (hours >= 24) return 480;
+    if (hours >= 6) return 360;
+    return 180;
+  }
+
+  api.fetchSeries = function (uuid, range, target) {
+    const hours = rangeHours(range);
+    const normalizedTarget = target && target !== 'all' ? String(target) : 'all';
+    return loadPingTasks(false).then(function (tasks) {
+      const params = {
+        metric_keys: ['ping.latency_ms'],
+        entity_ids: [String(uuid || '')],
+        hours: hours,
+        fill_empty: true,
+        max_points: rangePoints(hours),
+      };
+      if (normalizedTarget !== 'all') params.tags = { task_id: normalizedTarget };
+      return originalRpc('public:queryMetrics', params, hours >= 168 ? 18000 : 12000).then(function (raw) {
+        const byTask = Object.create(null);
+        (raw && Array.isArray(raw.series) ? raw.series : []).forEach(function (series) {
+          const id = taskIdFromSeries(series);
+          if (id) byTask[id] = metricPoints(series);
+        });
+        const orderedIds = [];
+        const seen = Object.create(null);
+        (tasks || []).forEach(function (task) {
+          const id = String(task && task.id != null ? task.id : '');
+          if (id && byTask[id] && !seen[id]) { seen[id] = true; orderedIds.push(id); }
+        });
+        Object.keys(byTask).forEach(function (id) { if (!seen[id]) orderedIds.push(id); });
+        const taskMap = Object.create(null);
+        (tasks || []).forEach(function (task) { if (task && task.id != null) taskMap[String(task.id)] = task; });
+        const seriesByTask = orderedIds.map(function (id) {
+          return { key: id, label: String(taskMap[id] && taskMap[id].name || ('Ping ' + id)), points: byTask[id] };
+        });
+        const selected = normalizedTarget !== 'all' ? normalizedTarget : (orderedIds[0] || '');
+        return { series: selected && byTask[selected] ? byTask[selected] : [], seriesByTask: seriesByTask, tasks: tasks };
+      });
+    }).catch(function () { return originalFetchSeries.call(api, uuid, range, target); });
+  };
+
+  function nativeSystemHistory(params, timeoutMs) {
+    const uuid = String(params && params.uuid || '');
+    const payload = currentPayload();
+    const server = payload && (payload.servers || []).find(function (item) { return String(item.uuid || '') === uuid; });
+    const ramTotal = server && numberOrNull(server.mem_total);
+    const diskTotal = server && numberOrNull(server.disk_total);
+    if (!uuid || !ramTotal || !diskTotal) return originalRpc('common:getRecords', params, timeoutMs);
+    const hours = Math.max(1, Number(params.hours) || 1);
+    const maxPoints = Math.max(120, Number(params.maxCount) || 360);
+    return originalRpc('public:queryMetrics', {
+      metric_keys: ['cpu.usage', 'memory.used', 'disk.used'],
+      entity_ids: [uuid],
+      hours: hours,
+      fill_empty: false,
+      max_points: maxPoints,
+    }, timeoutMs).then(function (raw) {
+      const rows = Object.create(null);
+      (raw && Array.isArray(raw.series) ? raw.series : []).forEach(function (series) {
+        const metric = String(series.metric_key || '');
+        (series.points || []).forEach(function (point) {
+          const t = Date.parse(point && point.time || '');
+          if (!Number.isFinite(t) || point.value == null || !Number.isFinite(Number(point.value))) return;
+          const key = String(t);
+          if (!rows[key]) rows[key] = { client: uuid, time: new Date(t).toISOString(), ram_total: ramTotal, disk_total: diskTotal };
+          if (metric === 'cpu.usage') rows[key].cpu = Number(point.value);
+          else if (metric === 'memory.used') rows[key].ram = Number(point.value);
+          else if (metric === 'disk.used') rows[key].disk = Number(point.value);
+        });
+      });
+      const records = Object.keys(rows).map(function (key) { return rows[key]; }).sort(function (a, b) { return Date.parse(a.time) - Date.parse(b.time); });
+      if (!records.length) return originalRpc('common:getRecords', params, timeoutMs);
+      return { records: records, count: records.length, source: 'metric-store' };
+    }).catch(function () { return originalRpc('common:getRecords', params, timeoutMs); });
+  }
+
+  api.rpc = function (method, params, timeoutMs) {
+    if (method === 'common:getRecords' && params && params.type === 'load' && params.load_type === 'all') {
+      return nativeSystemHistory(params, timeoutMs);
+    }
+    return originalRpc(method, params, timeoutMs);
+  };
+
+  function median(values) {
+    const list = values.filter(function (value) { return Number.isFinite(value) && value > 0; }).sort(function (a, b) { return a - b; });
+    if (!list.length) return null;
+    const mid = Math.floor(list.length / 2);
+    return list.length % 2 ? list[mid] : (list[mid - 1] + list[mid]) / 2;
+  }
+
+  function fetchBillingServersPage(page) {
+    return originalRpc('admin:getBillingServers', { currency: 'CNY', page: String(page), page_size: '100' }, 12000);
+  }
+
+  function fetchAllBillingServers() {
+    return fetchBillingServersPage(1).then(function (first) {
+      const items = first && Array.isArray(first.items) ? first.items.slice() : [];
+      const pages = Math.max(1, Number(first && first.pagination && first.pagination.pages) || 1);
+      if (pages <= 1) return items;
+      const calls = [];
+      for (let page = 2; page <= pages; page += 1) calls.push({ method: 'admin:getBillingServers', params: { currency: 'CNY', page: String(page), page_size: '100' } });
+      return runBatch(calls, 12000).then(function (rest) {
+        rest.forEach(function (part) { if (part && Array.isArray(part.items)) items.push.apply(items, part.items); });
+        return items;
+      });
+    });
+  }
+
+  function fallbackFx(payload, nativeRates, missing) {
+    if (!missing.length || !global.LineGridEnrich || !LineGridEnrich.getDailyExchangeRates) {
+      payload._fx_rates = nativeRates;
+      payload._fx_source = 'Lite Billing';
+      payload._fx_updated_at = Date.now();
+      return Promise.resolve(payload);
+    }
+    return LineGridEnrich.getDailyExchangeRates().then(function (fx) {
+      payload._fx_rates = Object.assign({}, fx && fx.rates || {}, nativeRates);
+      payload._fx_source = 'Lite Billing + fallback';
+      payload._fx_updated_at = fx && fx.updatedAt || Date.now();
+      return payload;
+    }).catch(function () {
+      payload._fx_rates = nativeRates;
+      payload._fx_source = 'Lite Billing';
+      payload._fx_updated_at = Date.now();
+      return payload;
+    });
+  }
+
+  function applyNativeBilling(payload, rows) {
+    const ratesByCurrency = Object.create(null);
+    const serverById = Object.create(null);
+    (payload.servers || []).forEach(function (server) { serverById[String(server.uuid || '')] = server; });
+    (rows || []).forEach(function (row) {
+      const server = serverById[String(row.client || '')];
+      if (server) {
+        server._billing_monthly_cny = numberOrNull(row.monthly_average);
+        server._billing_yearly_cny = numberOrNull(row.yearly_average);
+        server._billing_remaining_value_cny = numberOrNull(row.remaining_value);
+      }
+      const code = global.LineGridEnrich && LineGridEnrich.normalizeCurrency ? LineGridEnrich.normalizeCurrency(row.original_currency) : String(row.original_currency || 'CNY').toUpperCase();
+      if (code === 'CNY') {
+        if (!ratesByCurrency.CNY) ratesByCurrency.CNY = [];
+        ratesByCurrency.CNY.push(1);
+        return;
+      }
+      const amount = numberOrNull(row.original_amount);
+      const cycle = numberOrNull(row.billing_cycle_days);
+      const convertedMonthly = numberOrNull(row.monthly_average);
+      if (amount == null || cycle == null || cycle <= 0 || convertedMonthly == null || convertedMonthly <= 0) return;
+      const nativeMonthly = amount * 30.4375 / cycle;
+      const rate = nativeMonthly / convertedMonthly;
+      if (!Number.isFinite(rate) || rate <= 0) return;
+      if (!ratesByCurrency[code]) ratesByCurrency[code] = [];
+      ratesByCurrency[code].push(rate);
+    });
+    const nativeRates = { CNY: 1 };
+    Object.keys(ratesByCurrency).forEach(function (code) {
+      const value = median(ratesByCurrency[code]);
+      if (value != null) nativeRates[code] = value;
+    });
+    const wanted = Object.create(null);
+    (payload.servers || []).forEach(function (server) {
+      if (!(Number(server.price) > 0) || !(Number(server.billing_cycle) > 0)) return;
+      const code = global.LineGridEnrich && LineGridEnrich.normalizeCurrency ? LineGridEnrich.normalizeCurrency(server.currency) : String(server.currency || 'CNY').toUpperCase();
+      wanted[code] = true;
+    });
+    const missing = Object.keys(wanted).filter(function (code) { return !nativeRates[code]; });
+    payload._billing_source = 'lite-native';
+    return fallbackFx(payload, nativeRates, missing);
+  }
+
+  api.enrich = function (payload, options) {
+    options = options || {};
+    const baseOptions = Object.assign({}, options, { loadFx: false });
+    return originalEnrich(payload, baseOptions).then(function (next) {
+      const target = next || payload;
+      if (!target || options.loadFx !== true) return target;
+      return fetchAllBillingServers().then(function (rows) {
+        return applyNativeBilling(target, rows);
+      }).catch(function () {
+        if (!global.LineGridEnrich || !LineGridEnrich.getDailyExchangeRates) return target;
+        return LineGridEnrich.getDailyExchangeRates().then(function (fx) {
+          target._fx_rates = fx && fx.rates || LineGridEnrich.defaultRates;
+          target._fx_source = fx && fx.source || 'default';
+          target._fx_updated_at = fx && fx.updatedAt || null;
+          target._billing_source = 'fallback';
+          return target;
+        }).catch(function () { return target; });
+      });
+    });
+  };
+
+  // Compact status stays on Lite's native current-status RPC every two seconds.
+  // Ping statistics/series refresh separately from Metric Store once per minute,
+  // avoiding getNodesLatestStatus's legacy Ping aggregation path.
+  api.connectWS = function (onPayload) {
+    let stopped = false;
+    let running = false;
+    let timer = null;
+    let tick = 0;
+
+    function clear() {
+      if (timer) clearTimeout(timer);
+      timer = null;
+    }
+
+    function schedule() {
+      clear();
+      if (!stopped && !document.hidden) timer = setTimeout(refresh, 2000);
+    }
+
+    function refresh() {
+      const payload = currentPayload();
+      if (stopped || running || document.hidden || !payload) return;
+      running = true;
+      tick += 1;
+      originalRpc('common:getNodesLatestStatus', { compact: true }, 8000)
+        .then(function (latest) {
+          if (stopped) return null;
+          adapt.mergeLatest(payload, latest);
+          if (typeof onPayload === 'function') onPayload(payload, { kind: 'latest', ping: false });
+          if (tick % 30 !== 0) return null;
+          return api.fetchPingOverview().then(function (next) {
+            if (!stopped && next && typeof onPayload === 'function') onPayload(next, { kind: 'metric-ping', ping: true });
+          });
+        })
+        .catch(function () {})
+        .finally(function () { running = false; schedule(); });
+    }
+
+    function visible() {
+      if (!document.hidden) { clear(); refresh(); }
+    }
+
+    document.addEventListener('visibilitychange', visible);
+    refresh();
+    return {
+      close: function () {
+        stopped = true;
+        clear();
+        document.removeEventListener('visibilitychange', visible);
+      },
+    };
+  };
+
+  global.LineGridNativeData = {
+    version: '0.6.4',
+    ping: 'public:getPingMetricStats + public:queryMetrics',
+    system: 'public:queryMetrics',
+    billing: 'admin:getBillingServers',
   };
 })(window);
 
