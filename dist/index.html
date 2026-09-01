@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Line Grid</title>
   <meta name="description" content="Line Grid server monitoring theme for Lite.">
-  <meta name="line-grid-version" content="0.5.13">
+  <meta name="line-grid-version" content="0.6.0">
   <script>
     (function () {
       var t = localStorage.getItem("mmwx-theme") === "light" ? "light" : "dark";
@@ -3450,9 +3450,25 @@ html[data-font-mode="system"] {
   function mapLivePing(rawPing, existing) {
     const out = [];
     const old = {};
-    (existing || []).forEach(function (item) { old[String(item.key)] = item; });
+    const ordered = [];
+    const seen = {};
+    (existing || []).forEach(function (item) {
+      const key = String(item && item.key != null ? item.key : '');
+      if (!key) return;
+      old[key] = item;
+      if (rawPing && typeof rawPing === 'object' && Object.prototype.hasOwnProperty.call(rawPing, key) && !seen[key]) {
+        seen[key] = true;
+        ordered.push(key);
+      }
+    });
     if (!rawPing || typeof rawPing !== 'object') return existing || [];
     Object.keys(rawPing).forEach(function (key) {
+      key = String(key);
+      if (seen[key]) return;
+      seen[key] = true;
+      ordered.push(key);
+    });
+    ordered.forEach(function (key) {
       const row = rawPing[key] || {};
       const latest = numberOrNull(row.latest);
       const prior = old[String(key)] || {};
@@ -3722,7 +3738,13 @@ html[data-font-mode="system"] {
     const records = Array.isArray(raw.records) ? raw.records : [];
     const tasks = Array.isArray(raw.tasks) ? raw.tasks : [];
     const taskById = {};
-    tasks.forEach(function (task) { taskById[String(task.id)] = task; });
+    const taskOrder = [];
+    tasks.forEach(function (task) {
+      const id = String(task && task.id != null ? task.id : '');
+      if (!id) return;
+      taskById[id] = task;
+      taskOrder.push(id);
+    });
     const grouped = {};
     records.forEach(function (record) {
       const client = String(record.client || '');
@@ -3734,14 +3756,36 @@ html[data-font-mode="system"] {
 
     payload.servers.forEach(function (server) {
       const existing = {};
-      (server.ping || []).forEach(function (p) { existing[String(p.key)] = p; });
-      const ids = {};
-      Object.keys(existing).forEach(function (id) { ids[id] = true; });
+      const available = {};
+      const fallbackOrder = [];
+      function addAvailable(id) {
+        id = String(id == null ? '' : id);
+        if (!id || available[id]) return;
+        available[id] = true;
+        fallbackOrder.push(id);
+      }
+      (server.ping || []).forEach(function (p) {
+        const id = String(p.key);
+        existing[id] = p;
+        addAvailable(id);
+      });
       Object.keys(grouped).forEach(function (key) {
         const parts = key.split('\u0000');
-        if (parts[0] === server.uuid) ids[parts[1]] = true;
+        if (parts[0] === server.uuid) addAvailable(parts[1]);
       });
-      server.ping = Object.keys(ids).map(function (id) {
+      const orderedIds = [];
+      const orderedSeen = {};
+      taskOrder.forEach(function (id) {
+        if (!available[id] || orderedSeen[id]) return;
+        orderedSeen[id] = true;
+        orderedIds.push(id);
+      });
+      fallbackOrder.forEach(function (id) {
+        if (orderedSeen[id]) return;
+        orderedSeen[id] = true;
+        orderedIds.push(id);
+      });
+      server.ping = orderedIds.map(function (id) {
         const prior = existing[id] || {};
         const rows = (grouped[server.uuid + '\u0000' + id] || []).slice().sort(function (a, b) {
           return (parseTime(a.time) || 0) - (parseTime(b.time) || 0);
@@ -3769,7 +3813,7 @@ html[data-font-mode="system"] {
             return { ms: v != null && v >= 0 ? Math.round(v) : -1, loss: v != null && v < 0 ? 100 : 0, t: parseTime(row.time) };
           }),
         };
-      }).sort(function (a, b) { return Number(a.key) - Number(b.key); });
+      });
     });
     payload._ping_history_status = records.length ? 'ok' : 'unavailable';
     return payload;
@@ -3832,18 +3876,40 @@ html[data-font-mode="system"] {
     const records = Array.isArray(raw.records) ? raw.records : [];
     const tasks = Array.isArray(raw.tasks) ? raw.tasks : [];
     const taskMap = {};
-    tasks.forEach(function (task) { taskMap[String(task.id)] = task; });
+    const taskOrder = [];
+    tasks.forEach(function (task) {
+      const id = String(task && task.id != null ? task.id : '');
+      if (!id) return;
+      taskMap[id] = task;
+      taskOrder.push(id);
+    });
     const byTask = {};
+    const recordTaskOrder = [];
     records.forEach(function (record) {
       if (uuid && record.client && String(record.client) !== String(uuid)) return;
       const id = String(record.task_id == null ? '' : record.task_id);
       if (!id) return;
-      (byTask[id] = byTask[id] || []).push({ t: parseTime(record.time), value: numberOrNull(record.value), task_id: id });
+      if (!byTask[id]) {
+        byTask[id] = [];
+        recordTaskOrder.push(id);
+      }
+      byTask[id].push({ t: parseTime(record.time), value: numberOrNull(record.value), task_id: id });
     });
     Object.keys(byTask).forEach(function (id) {
       byTask[id].sort(function (a, b) { return (a.t || 0) - (b.t || 0); });
     });
-    const ids = Object.keys(byTask).sort(function (a, b) { return Number(a) - Number(b); });
+    const ids = [];
+    const seen = {};
+    taskOrder.forEach(function (id) {
+      if (!byTask[id] || seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    });
+    recordTaskOrder.forEach(function (id) {
+      if (seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    });
     const selected = target && target !== 'all' ? String(target) : (ids[0] || '');
     return {
       series: selected && byTask[selected] ? byTask[selected] : [],

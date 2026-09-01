@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.0
+
+- Match Ping task ordering to the Lite backend across node detail legends, latency selectors, Network view, and historical multi-series charts.
+- Preserve the backend task order during live status refreshes instead of falling back to JavaScript object-key / numeric-ID order.
+- Keep unknown or legacy task IDs stable at the end without disturbing known Lite task order.
+- Add a regression test with intentionally conflicting backend, live-object, record, and numeric-ID orders.
+- Includes the v0.5.13 Network time-axis/date fix, deep online/offline status colors, and guest renewal-price privacy fix.
+
 ## v0.5.13
 
 - Fix network latency charts to preserve timestamps, show concrete time/date labels, and keep sparse history in its true position inside 1H / 6H / 24H / 7D windows.
