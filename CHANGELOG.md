@@ -2,6 +2,7 @@
 
 ## v0.6.5
 
+- Restore traffic billing-period dates and reset countdown after the RPC Batch bootstrap path by applying Lite reset-day display windows to `fetchBootstrap()` results.
 - Patch high-frequency live DOM updates in place for fleet summary, keyed node rows/cards/slabs, footer, node-detail navigation/body, and Network/Resource refreshes instead of replacing whole subtrees.
 - Preserve keyed node elements while live sorting/reordering, and use display-level live signatures so unchanged online nodes are not rebuilt just because raw timestamps or counters advanced.
 - Keep chart SVGs stable during the 2-second compact status stream, while allowing minute Metric-Ping and user-driven renders to refresh changed charts normally.

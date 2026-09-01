@@ -10,6 +10,7 @@ if(fs.existsSync('src/correctness.js')) throw new Error('temporary correctness l
 for(const t of ['ProbeConfig','LINE_GRID_METADATA','loadMetadata(','metadataFor(','query.get(\'api\')','ProbeDemo']) if(s.includes(t)) throw new Error('legacy '+t);
 if(!s.includes("function rpcUrl() {\n    return '/api/rpc2';")) throw new Error('RPC2 path');
 if(!s.includes('function rpcBatch(calls, timeoutMs)')||!s.includes('fetchBootstrap: fetchBootstrap')) throw new Error('RPC batch API missing');
+if(!s.includes('const originalFetchBootstrap = global.ProbeAPI.fetchBootstrap;')||!s.includes('applyLiteDisplayWindows(result && result.payload);')) throw new Error('batched bootstrap traffic-cycle display window missing');
 if(!n.includes('function runBatch(calls, timeoutMs)')||!n.includes('originalRpcBatch')) throw new Error('native RPC batch reuse missing');
 if(!s.includes('function patchDOMNode(current, next)')||!s.includes('function patchElementFromHTML(current, html)')||!s.includes('function patchInnerHTML(target, html)')) throw new Error('DOM patch helpers missing');
 if(!s.includes('if (domPatchActive) patchInnerHTML(main, html)')||!s.includes('patchInnerHTML(winBody')||!s.includes('patchInnerHTML(foot')) throw new Error('DOM patch coverage missing');

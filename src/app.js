@@ -1454,6 +1454,17 @@
     setTimeout(refreshUICompatibility, 0);
   }
 
+  if (global.ProbeAPI && typeof global.ProbeAPI.fetchBootstrap === 'function') {
+    const originalFetchBootstrap = global.ProbeAPI.fetchBootstrap;
+    global.ProbeAPI.fetchBootstrap = function () {
+      return Promise.resolve(originalFetchBootstrap.apply(this, arguments)).then(function (result) {
+        applyLiteDisplayWindows(result && result.payload);
+        scheduleUICompatibility();
+        return result;
+      });
+    };
+  }
+
   if (global.ProbeAPI && typeof global.ProbeAPI.fetchServers === 'function') {
     const originalFetchServers = global.ProbeAPI.fetchServers;
     global.ProbeAPI.fetchServers = function () {
