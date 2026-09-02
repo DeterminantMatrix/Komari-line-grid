@@ -1783,14 +1783,14 @@
       ticks += '<line x1="' + x.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x.toFixed(1) + '" y2="' + y2 + '" stroke="' + color + '" stroke-width="' + (d === selected ? 1.6 : 1) + '"/>';
       const major = d === 1 || d === 5 || d === 10 || d === 15 || d === 20 || d === 30 || d === daysInMonth;
       if (major) {
-        labels += '<text x="' + x.toFixed(1) + '" y="44" text-anchor="middle" fill="' + inkRgba(0.28) + '" font-size="11" font-family="IBM Plex Mono, monospace">' + String(d).padStart(2, "0") + "</text>";
+        labels += '<text x="' + x.toFixed(1) + '" y="44" text-anchor="middle" fill="' + inkRgba(0.28) + '" font-size="12.1" font-family="IBM Plex Mono, monospace">' + String(d).padStart(2, "0") + "</text>";
       }
     }
     const cx = ((selected - 1) / Math.max(1, daysInMonth - 1)) * (w - 8) + 4;
     const mark =
       '<line x1="' + cx.toFixed(1) + '" y1="2" x2="' + cx.toFixed(1) + '" y2="26" stroke="' + gold() + '" stroke-width="1.2"/>' +
       '<circle cx="' + cx.toFixed(1) + '" cy="30" r="7" fill="' + voidFill() + '" stroke="' + gold() + '"/>' +
-      '<text x="' + cx.toFixed(1) + '" y="33.5" text-anchor="middle" fill="' + token("--ink", "#ddd6c8") + '" font-size="8" font-family="IBM Plex Mono, monospace">' + selected + "</text>";
+      '<text x="' + cx.toFixed(1) + '" y="33.5" text-anchor="middle" fill="' + token("--ink", "#ddd6c8") + '" font-size="8.8" font-family="IBM Plex Mono, monospace">' + selected + "</text>";
     let extra = "";
     if (half && half !== selected) {
       const hx = ((half - 1) / Math.max(1, daysInMonth - 1)) * (w - 8) + 4;
@@ -3641,7 +3641,7 @@
         "</div>" +
         (ctx.last7.length ? '<section class="day-grid">' +
           ctx.last7.map(function (d) {
-            return "<article><div class='lbl'>" + h(d.date.slice(5)) + "</div><div class='val' style='font-size:16px'>" + fmtBytes(d.total, 1) + "</div><div class='hero-sub'>↑ " + fmtBytes(d.uplink, 1) + "　↓ " + fmtBytes(d.downlink, 1) + "</div></article>";
+            return "<article><div class='lbl'>" + h(d.date.slice(5)) + "</div><div class='val' style='font-size:17.6px'>" + fmtBytes(d.total, 1) + "</div><div class='hero-sub'>↑ " + fmtBytes(d.uplink, 1) + "　↓ " + fmtBytes(d.downlink, 1) + "</div></article>";
           }).join("") +
         "</section>" : '') +
       "</article>"
@@ -4071,7 +4071,7 @@
         '<g class="globe-node">' +
           '<path d="M ' + n.px.toFixed(1) + " " + n.py.toFixed(1) + " L " + n.lx.toFixed(1) + " " + n.ly.toFixed(1) + '" fill="none" stroke="var(--ink)" stroke-width="0.75"/>' +
           '<circle cx="' + n.px.toFixed(1) + '" cy="' + n.py.toFixed(1) + '" r="2.1" fill="none" stroke="' + pingColor(n.s) + '" stroke-width="1.15"/>' +
-          '<text x="' + tx.toFixed(1) + '" y="' + (n.ly + 3).toFixed(1) + '" text-anchor="' + (n.end ? "end" : "start") + '" fill="var(--ink-soft)" font-size="8.5" font-family="IBM Plex Mono, monospace" stroke="var(--void)" stroke-width="3" paint-order="stroke" stroke-linejoin="round">' + h(label) + "</text>" +
+          '<text x="' + tx.toFixed(1) + '" y="' + (n.ly + 3).toFixed(1) + '" text-anchor="' + (n.end ? "end" : "start") + '" fill="var(--ink-soft)" font-size="9.35" font-family="IBM Plex Mono, monospace" stroke="var(--void)" stroke-width="3" paint-order="stroke" stroke-linejoin="round">' + h(label) + "</text>" +
           '<circle class="hit" cx="' + n.px.toFixed(1) + '" cy="' + n.py.toFixed(1) + '" r="9" fill="transparent" data-index="' + attr(n.key) + '"/>' +
         "</g>"
       );
@@ -4082,7 +4082,7 @@
       if (p) selectedMarker = '<g class="globe-selected" aria-label="' + attr(regionFilter) + '"><circle class="globe-selected-ring" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="7"/><circle class="globe-selected-core" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="2.4"/></g>';
     }
     return wire + links + pins + selectedMarker +
-      '<text class="globe-caption" x="230" y="' + (cy + R + 28) + '" text-anchor="middle" font-size="8" font-family="IBM Plex Mono, monospace" letter-spacing="1.4">' + globeCaption() + " · " + cfg.key.toUpperCase() + "</text>";
+      '<text class="globe-caption" x="230" y="' + (cy + R + 28) + '" text-anchor="middle" font-size="8.8" font-family="IBM Plex Mono, monospace" letter-spacing="1.4">' + globeCaption() + " · " + cfg.key.toUpperCase() + "</text>";
   }
 
   function globePanel() {
@@ -4251,7 +4251,7 @@
         '<div class="chart-fill" style="height:240px">' + chart + "</div>" +
         '<div class="bucket-strip" style="margin-top:14px">' +
           targets.map(function (p) {
-            return "<article><div class='lbl'>" + h(p.label) + "</div><div class='val' style='font-size:16px'>" + h(pingText(p)) + "</div><div class='hero-sub'>" + lossHTML(p.loss_pct) + " · avg " + h(p.avg_ms == null ? '—' : Math.round(p.avg_ms) + 'ms') + "</div></article>";
+            return "<article><div class='lbl'>" + h(p.label) + "</div><div class='val' style='font-size:17.6px'>" + h(pingText(p)) + "</div><div class='hero-sub'>" + lossHTML(p.loss_pct) + " · avg " + h(p.avg_ms == null ? '—' : Math.round(p.avg_ms) + 'ms') + "</div></article>";
           }).join("") +
         "</div>" +
       "</section>" + cycleBlock());
