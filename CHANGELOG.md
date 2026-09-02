@@ -2,6 +2,7 @@
 
 ## v0.6.7
 
+- Re-render a newly opened node detail window after its initial Ping-series requests finish, so the first view immediately uses the same aligned fixed-window data as subsequent tab switches.
 - Align fixed-window detail Ping charts to the current valid Ping by trimming only trailing empty Metric Store placeholders and appending the live value; true loss gaps remain visible.
 - Make node-list latency sparklines fill their flexible chart column so wide layouts no longer leave a blank block on the right.
 - Trim trailing empty Metric Store buckets when the current Ping is valid, so overview sparklines reach the right edge while genuine current loss remains a visible gap.

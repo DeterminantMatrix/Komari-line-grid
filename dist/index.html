@@ -7388,9 +7388,16 @@ html[data-font-mode="system"] {
     targetKey = node && node.ping && node.ping.length ? node.ping[0].key : "";
     latencyTargetKey = "all";
     range = "1h";
-    go(viewHash(route().view || lastView, index, page || "overview"));
-    loadSeries(index, targetKey || undefined);
-    loadSeries(index, "all");
+    const initialPage = page || "overview";
+    go(viewHash(route().view || lastView, index, initialPage));
+    Promise.all([
+      loadSeries(index, targetKey || undefined),
+      loadSeries(index, "all")
+    ]).then(function () {
+      const current = route();
+      if (current.node == null || String(current.node) !== String(index)) return;
+      renderWindow(current.node, current.page || initialPage);
+    });
   }
 
   function onMainClick(ev) {
