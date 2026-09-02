@@ -2825,15 +2825,37 @@
     );
   }
 
+  function compactCapacity(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value <= 0) return "—";
+    const units = [[U.TB, "TB"], [U.GB, "GB"], [U.MB, "MB"], [U.KB, "KB"]];
+    for (let i = 0; i < units.length; i += 1) {
+      if (value < units[i][0]) continue;
+      const scaled = value / units[i][0];
+      const rounded = Math.round(scaled * 10) / 10;
+      return (Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)) + units[i][1];
+    }
+    return Math.round(value) + "B";
+  }
+
+  function coreCountText(server) {
+    const cores = Number(server && (server.cpu_threads != null ? server.cpu_threads : server.cpu_cores));
+    return Number.isFinite(cores) && cores > 0 ? Math.round(cores) + "C" : "—";
+  }
+
+  function resourceCell(value, capacity) {
+    return '<span class="hide-sm resource-cell"><b>' + h(value) + '</b><small>' + h(capacity) + '</small></span>';
+  }
+
   function meters(server) {
     const mem = pctMetric(server.mem_used, server.mem_total);
     const disk = pctMetric(server.disk_used, server.disk_total);
     const cpu = server.cpu_pct == null ? null : Number(server.cpu_pct);
     return (
       '<div class="meters">' +
-        '<div class="meter"><span>CPU ' + pctText(cpu) + '</span><i style="--p:' + (cpu == null ? 0 : cpu) + '%"></i></div>' +
-        '<div class="meter"><span>内存 ' + pctText(mem) + '</span><i style="--p:' + (mem == null ? 0 : mem) + '%"></i></div>' +
-        '<div class="meter"><span>硬盘 ' + pctText(disk) + '</span><i style="--p:' + (disk == null ? 0 : disk) + '%"></i></div>' +
+        '<div class="meter"><span>CPU ' + pctText(cpu) + '</span><small>' + h(coreCountText(server)) + '</small><i style="--p:' + (cpu == null ? 0 : cpu) + '%"></i></div>' +
+        '<div class="meter"><span>内存 ' + pctText(mem) + '</span><small>' + h(compactCapacity(server.mem_total)) + '</small><i style="--p:' + (mem == null ? 0 : mem) + '%"></i></div>' +
+        '<div class="meter"><span>硬盘 ' + pctText(disk) + '</span><small>' + h(compactCapacity(server.disk_total)) + '</small><i style="--p:' + (disk == null ? 0 : disk) + '%"></i></div>' +
       "</div>"
     );
   }
@@ -2942,6 +2964,7 @@
       server.online ? fmtDays(server.uptime) : lastSeenText(server),
       fmtSpeed(server.download_speed), fmtSpeed(server.upload_speed),
       tenth(cpu), tenth(mem), tenth(disk), tenth(quota),
+      coreCountText(server), compactCapacity(server.mem_total), compactCapacity(server.disk_total),
       fmtBytes(server.traffic_used, 1), ms, lossText(loss),
       ms != null && ms > 80, ms != null && ms > 180, loss != null && loss > 20,
       remainingDaysText(server), trafficResetDays(server)
@@ -2992,9 +3015,9 @@
         '<span class="speeds row-speeds">' + rowSpeedPair(server) + '</span>' +
         '<span class="latency-cell"><span class="ms' + latencyTone(ms) + '">' + (ms == null ? "—" : ms + " ms") + '</span><small class="' + lossTone(pingLoss(server)).trim() + '">' + lossText(pingLoss(server)) + '</small></span>' +
         sparkOf(server) +
-        '<span class="hide-sm">' + pctText(server.cpu_pct) + "</span>" +
-        '<span class="hide-sm">' + pctText(mem) + "</span>" +
-        '<span class="hide-sm">' + pctText(disk) + "</span>" +
+        resourceCell(pctText(server.cpu_pct), coreCountText(server)) +
+        resourceCell(pctText(mem), compactCapacity(server.mem_total)) +
+        resourceCell(pctText(disk), compactCapacity(server.disk_total)) +
         quotaMini(server) +
         '<span class="hide-sm">' + fmtDays(server.uptime) + "</span>" +
         '<span class="life-cost"><span class="life-remain">' + remainingHTMLFor(server) + '</span></span>' +

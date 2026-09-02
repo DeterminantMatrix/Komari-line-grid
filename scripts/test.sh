@@ -16,6 +16,8 @@ if(!n.includes('const STATIC_RECONCILE_MS = 2 * 60 * 1000;')||!n.includes('const
 if(!n.includes('nativeShanghaiDateKey')||!n.includes("kind: 'cycle-rollover'" )||!n.includes('applyLiteDisplayWindows(payload, now)')) throw new Error('traffic cycle rollover refresh missing');
 if(!s.includes('let seriesCacheAt = {};')||!s.includes('let seriesLoadInFlight = {};')||!s.includes('function seriesTTLForRange(value)')||!s.includes('function refreshVisibleSeries()')||!s.includes('refreshVisibleSeries();')) throw new Error('visible series TTL refresh missing');
 if(!s.includes("if (key === '7d') return 10 * 60 * 1000;")||!s.includes("if (key === '24h') return 5 * 60 * 1000;")||!s.includes("if (key === '6h') return 2 * 60 * 1000;")) throw new Error('series TTL policy missing');
+if(!s.includes('function compactCapacity(bytes)')||!s.includes('function coreCountText(server)')||!s.includes('resourceCell(pctText(server.cpu_pct), coreCountText(server))')) throw new Error('resource capacity labels missing');
+if(!c.includes('.spark-wrap > .spark')||!c.includes('.resource-cell')||!c.includes('.meter small')) throw new Error('responsive spark/resource capacity CSS missing');
 if(!s.includes('function patchDOMNode(current, next)')||!s.includes('function patchElementFromHTML(current, html)')||!s.includes('function patchInnerHTML(target, html)')) throw new Error('DOM patch helpers missing');
 if(!s.includes('if (domPatchActive) patchInnerHTML(main, html)')||!s.includes('patchInnerHTML(winBody')||!s.includes('patchInnerHTML(foot')) throw new Error('DOM patch coverage missing');
 if(s.includes('el.outerHTML = nodeMarkup(view, item)')||s.includes('fleet.outerHTML = fleetStrip()')) throw new Error('live subtree replacement regression');

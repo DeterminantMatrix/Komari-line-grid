@@ -2864,3 +2864,37 @@ html[data-font-mode="system"] {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
+
+/* Responsive node sparklines and compact resource capacities */
+.spark-wrap > .spark {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.resource-cell {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.05;
+}
+.resource-cell b {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 500;
+}
+.resource-cell small,
+.meter small {
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.resource-cell small { font-size: 9px; }
+.meter span { margin-bottom: 2px; }
+.meter small {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10px;
+  line-height: 1;
+}
