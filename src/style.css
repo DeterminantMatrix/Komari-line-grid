@@ -2927,6 +2927,7 @@ html[data-font-mode="system"] {
 }
 .page-system .spec { height: auto; }
 
+@media (min-width: 721px) {
 /* Grid and column layouts keep the original pre-0.6.8 typography. */
 .board .card-coord { font-size: 10px; }
 .board .cc,
@@ -2970,6 +2971,7 @@ html[data-font-mode="system"] {
 .list .row .quota-reset { font-size: 10.5px; }
 .list .row .life-cost b { font-size: 11.55px; }
 .list .row .life-cost small { font-size: 9.45px; }
+}
 
 @media (max-width: 720px) {
   .stage.is-compact-system {
