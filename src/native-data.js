@@ -672,7 +672,7 @@
   };
 
   global.LineGridNativeData = {
-    version: '0.6.6',
+    version: '0.6.7',
     ping: 'public:getPingMetricStats + public:queryMetrics',
     system: 'public:queryMetrics',
     billing: 'admin:getBillingServers',

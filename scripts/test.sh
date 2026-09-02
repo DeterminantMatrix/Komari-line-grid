@@ -40,7 +40,7 @@ for(const t of [
   "originalMergePingHistory",
   "shanghaiDayOfMonth",
   "common:getNodesLatestStatus', { compact: true }",
-  "version: '0.6.6'"
+  "version: '0.6.7'"
 ]) if(!n.includes(t)) throw new Error('missing native data guard '+t);
 if(!n.includes("return originalFetchSeries.call(api, uuid, range, target);")) throw new Error('native Ping fallback arguments');
 if(n.includes('liveAt > metricAt') || n.includes('keepNewerLive')) throw new Error('node status timestamp must not gate Metric Store Ping refresh');

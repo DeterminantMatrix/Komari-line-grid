@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.7
+
+- Make node-list latency sparklines fill their flexible chart column so wide layouts no longer leave a blank block on the right.
+- Show compact machine capacity beneath CPU, memory and disk usage across list, grid and column views: logical/vCPU count, total memory and total disk.
+- Include resource capacities in the live display signature so Lite metadata reconciliation updates changed machine specifications in place.
+
 ## v0.6.6
 
 - Reconcile Lite static node metadata every two minutes and immediately after returning to a visible tab, so node add/remove, names, limits, reset days, prices, expiry and public settings update without a browser refresh.
