@@ -140,20 +140,53 @@
   }
 
   function pingLatencyPoints(latencySeries, lossSeries) {
-    const lossByTime = Object.create(null);
-    metricPoints(lossSeries).forEach(function (point) {
-      if (point.t != null && Number.isFinite(point.value)) lossByTime[String(point.t)] = point.value;
-    });
-    return metricPoints(latencySeries).map(function (point) {
-      const lossValue = lossByTime[String(point.t)];
-      // Lite Metric Store may emit 0 for a lost probe. A zero-latency point is
-      // not meaningful here, so keep loss/missing samples as chart gaps.
-      if (!(point.value > 0) || (Number.isFinite(lossValue) && lossValue > 0)) {
-        return { t: point.t, value: -1 };
-      }
-      return point;
-    });
-  }
+  const lossByTime = Object.create(null);
+  metricPoints(lossSeries).forEach(function (point) {
+    if (point.t != null && Number.isFinite(point.value)) lossByTime[String(point.t)] = point.value;
+  });
+  return metricPoints(latencySeries).map(function (point) {
+    const lossValue = lossByTime[String(point.t)];
+    const isLoss = Number.isFinite(lossValue) && lossValue > 0;
+    // Keep true loss distinct from fill_empty placeholders. Detail charts
+    // may trim only trailing placeholders when a valid current Ping exists.
+    if (!(point.value > 0) || isLoss) {
+      return { t: point.t, value: -1, is_loss: isLoss };
+    }
+    return { t: point.t, value: point.value, is_loss: false };
+  });
+}
+
+function alignSeriesToCurrentPing(uuid, byTask) {
+  const payload = currentPayload();
+  const server = payload && Array.isArray(payload.servers)
+    ? payload.servers.find(function (item) { return String(item && item.uuid || '') === String(uuid || ''); })
+    : null;
+  if (!server) return byTask;
+  const now = Date.now();
+  (server.ping || []).forEach(function (ping) {
+    const id = String(ping && ping.key != null ? ping.key : '');
+    if (!id) return;
+    const current = ping && ping.current_ms != null ? Number(ping.current_ms) : NaN;
+    if (!(Number.isFinite(current) && current > 0) || ping.is_loss === true) return;
+    const points = Array.isArray(byTask[id]) ? byTask[id].slice() : [];
+    // fill_empty can leave empty buckets at the end of the requested
+    // window. Remove only those placeholders; never remove a real-loss gap.
+    while (points.length) {
+      const tail = points[points.length - 1];
+      if (!(Number(tail && tail.value) < 0) || (tail && tail.is_loss === true)) break;
+      points.pop();
+    }
+    const last = points.length ? points[points.length - 1] : null;
+    if (last && Number(last.t) >= now - 1000) {
+      last.value = current;
+      last.is_loss = false;
+    } else {
+      points.push({ t: now, value: current, is_loss: false, is_live: true });
+    }
+    byTask[id] = points;
+  });
+  return byTask;
+}
 
   function indexMetricSeries(raw, metricKey) {
     const out = Object.create(null);
@@ -322,6 +355,7 @@
         Object.keys(latencyByTask).forEach(function (id) {
           byTask[id] = pingLatencyPoints(latencyByTask[id], lossByTask[id]);
         });
+        alignSeriesToCurrentPing(uuid, byTask);
         const orderedIds = [];
         const seen = Object.create(null);
         (tasks || []).forEach(function (task) {
