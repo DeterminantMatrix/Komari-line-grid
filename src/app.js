@@ -2660,10 +2660,23 @@
     });
   }
 
+  function trimTrailingOverviewGaps(values, currentMs) {
+  const vals = Array.isArray(values) ? values.slice() : [];
+  if (currentMs == null) return vals;
+  while (vals.length > 1) {
+    const tail = vals[vals.length - 1];
+    const value = tail == null ? NaN : Number(tail);
+    if (Number.isFinite(value) && value >= 0) break;
+    vals.pop();
+  }
+  return vals;
+}
+
   function sparkOf(server, tall) {
     const p = primaryPing(server);
     let vals = p && p.buckets ? p.buckets.map(function (b) { return b.ms; }) : [];
     const ms = pingMs(server);
+    vals = trimTrailingOverviewGaps(vals, ms);
     if (!vals.length && ms != null) vals = [ms, ms];
     return (
       '<div class="spark-wrap">' +

@@ -3,6 +3,7 @@
 ## v0.6.7
 
 - Make node-list latency sparklines fill their flexible chart column so wide layouts no longer leave a blank block on the right.
+- Trim trailing empty Metric Store buckets when the current Ping is valid, so overview sparklines reach the right edge while genuine current loss remains a visible gap.
 - Show compact machine capacity beneath CPU, memory and disk usage across list, grid and column views: logical/vCPU count, total memory and total disk.
 - Include resource capacities in the live display signature so Lite metadata reconciliation updates changed machine specifications in place.
 
