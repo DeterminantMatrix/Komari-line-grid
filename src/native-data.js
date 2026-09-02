@@ -706,7 +706,7 @@ function alignSeriesToCurrentPing(uuid, byTask) {
   };
 
   global.LineGridNativeData = {
-    version: '0.6.7',
+    version: '0.6.8',
     ping: 'public:getPingMetricStats + public:queryMetrics',
     system: 'public:queryMetrics',
     billing: 'admin:getBillingServers',

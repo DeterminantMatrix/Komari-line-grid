@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.8 (experimental)
+
+- Experimental typography pass: increase interface text by roughly 10% while intentionally preserving live throughput text at its previous size.
+- Increase contrast of compact CPU core, memory capacity and disk capacity labels for better readability on dark backgrounds.
+
 ## v0.6.7
 
 - Re-render a newly opened node detail window after its initial Ping-series requests finish, so the first view immediately uses the same aligned fixed-window data as subsequent tab switches.
