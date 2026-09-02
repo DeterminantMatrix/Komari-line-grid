@@ -1,0 +1,64 @@
+name: Preserve compact mobile typography
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  guard-mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Scope desktop layout typography
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          css = Path('src/style.css')
+          text = css.read_text()
+          start = '/* Grid and column layouts keep the original pre-0.6.8 typography. */'
+          end = '@media (max-width: 720px) {\n  .stage.is-compact-system {'
+          if start not in text or end not in text:
+              raise SystemExit('layout typography block anchors missing')
+          before, rest = text.split(start, 1)
+          middle, after = rest.split(end, 1)
+          if '@media (min-width: 721px)' in middle:
+              raise SystemExit('desktop scope already applied')
+          scoped = '@media (min-width: 721px) {\n' + start + middle.rstrip() + '\n}\n\n'
+          css.write_text(before + scoped + end + after)
+
+          test = Path('scripts/test.sh')
+          t = test.read_text()
+          old = "if(!c.includes('/* v0.6.8 layout-aware typography tuning */')||!c.includes('.stage.is-compact-system .stage-body')||!c.includes('overflow-y: auto;')||!c.includes('.page-system .spec { height: auto; }')||!c.includes('.list .row .quota-cell-n')||!c.includes('font-size: 10.5px;')||!c.includes('.board .name')||!c.includes('.stack .slab-ms { font-size: 28px; }')) throw new Error('v0.6.8 layout typography tuning missing');"
+          new = "if(!c.includes('/* v0.6.8 layout-aware typography tuning */')||!c.includes('.stage.is-compact-system .stage-body')||!c.includes('overflow-y: auto;')||!c.includes('.page-system .spec { height: auto; }')||!c.includes('@media (min-width: 721px)')||!c.includes('.list .row .quota-cell-n')||!c.includes('font-size: 10.5px;')||!c.includes('.board .name')||!c.includes('.stack .slab-ms { font-size: 28px; }')) throw new Error('v0.6.8 layout typography tuning missing');"
+          if old not in t:
+              raise SystemExit('layout test guard missing')
+          test.write_text(t.replace(old, new, 1))
+          PY
+      - name: Test and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/test.sh
+          node scripts/build-release.js >/dev/null
+          node scripts/build-release.js --check >/dev/null
+      - name: Commit clean source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/guard-v068-mobile.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/style.css scripts/test.sh dist/index.html .github/workflows/guard-v068-mobile.yml
+          git diff --cached --check
+          git commit -m "fix: keep mobile typography compact" -m "Apply the v0.6.8 grid/column reset and horizontal 105% typography only on desktop, preserving the dedicated compact mobile type scale."
+          git push origin HEAD:main
